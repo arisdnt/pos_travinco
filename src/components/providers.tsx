@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
-import { Toaster } from '@/components/ui/toaster'
+import ClientToaster from '@/components/client-toaster'
 import AuthProvider from '@/components/auth/auth-provider'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -29,7 +29,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       >
         <AuthProvider>
           {children}
-          <Toaster />
+          <ClientToaster />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

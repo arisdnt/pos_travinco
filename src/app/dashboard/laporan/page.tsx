@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { Navbar } from '@/components/layout/navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,132 +12,55 @@ import { Download, FileText, BarChart3, TrendingUp, Package, Search, Calendar, F
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { DataTable, SortableHeader } from '@/components/ui/data-table';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/auth/auth-provider';
 
-// Mock data untuk laporan
-const mockLaporanPenjualan = [
-  {
-    nama_produk_jadi: 'Parfum Lavender 50ml',
-    sku: 'LAV001',
-    total_terjual: 15,
-    total_pendapatan: 2250000,
-    periode: '2024-01',
-    kategori: 'Parfum',
-    margin: 45,
-    growth: 12.5
-  },
-  {
-    nama_produk_jadi: 'Parfum Rose 30ml',
-    sku: 'ROS001',
-    total_terjual: 8,
-    total_pendapatan: 960000,
-    periode: '2024-01',
-    kategori: 'Parfum',
-    margin: 42,
-    growth: -5.2
-  },
-  {
-    nama_produk_jadi: 'Parfum Vanilla 30ml',
-    sku: 'VAN001',
-    total_terjual: 12,
-    total_pendapatan: 1440000,
-    periode: '2024-01',
-    kategori: 'Parfum',
-    margin: 48,
-    growth: 8.7
-  },
-  {
-    nama_produk_jadi: 'Body Mist Citrus 100ml',
-    sku: 'CIT001',
-    total_terjual: 20,
-    total_pendapatan: 1600000,
-    periode: '2024-01',
-    kategori: 'Body Mist',
-    margin: 35,
-    growth: 25.3
-  }
-];
+// Interfaces untuk data dari database
+interface LaporanPenjualan {
+  nama_produk_jadi: string;
+  sku: string;
+  total_terjual: number;
+  total_pendapatan: number;
+  periode: string;
+  user_id: string;
+}
 
-const mockLaporanPemakaianBahan = [
-  {
-    nama_bahan_baku: 'Alkohol 96%',
-    unit: 'ml',
-    total_terpakai: 825,
-    periode: '2024-01',
-    harga_per_unit: 15000,
-    total_biaya: 12375000,
-    kategori: 'Base',
-    supplier: 'PT Kimia Jaya'
-  },
-  {
-    nama_bahan_baku: 'Essential Oil Lavender',
-    unit: 'ml',
-    total_terpakai: 150,
-    periode: '2024-01',
-    harga_per_unit: 50000,
-    total_biaya: 7500000,
-    kategori: 'Fragrance',
-    supplier: 'CV Aroma Nusantara'
-  },
-  {
-    nama_bahan_baku: 'Essential Oil Rose',
-    unit: 'ml',
-    total_terpakai: 40,
-    periode: '2024-01',
-    harga_per_unit: 80000,
-    total_biaya: 3200000,
-    kategori: 'Fragrance',
-    supplier: 'CV Aroma Nusantara'
-  },
-  {
-    nama_bahan_baku: 'Essential Oil Vanilla',
-    unit: 'ml',
-    total_terpakai: 72,
-    periode: '2024-01',
-    harga_per_unit: 60000,
-    total_biaya: 4320000,
-    kategori: 'Fragrance',
-    supplier: 'PT Essential Indo'
-  }
-];
+interface LaporanPemakaianBahan {
+  nama_bahan_baku: string;
+  unit: string;
+  total_terpakai: number;
+  periode: string;
+  user_id: string;
+}
 
-const mockStokTersedia = [
-  {
-    nama_produk_jadi: 'Parfum Lavender 50ml',
-    sku: 'LAV001',
-    stok_tersedia: 12,
-    status: 'Aman',
-    min_stok: 5,
-    harga_jual: 150000,
-    kategori: 'Parfum'
-  },
-  {
-    nama_produk_jadi: 'Parfum Rose 30ml',
-    sku: 'ROS001',
-    stok_tersedia: 3,
-    status: 'Rendah',
-    min_stok: 5,
-    harga_jual: 120000,
-    kategori: 'Parfum'
-  },
-  {
-    nama_produk_jadi: 'Parfum Vanilla 30ml',
-    sku: 'VAN001',
-    stok_tersedia: 8,
-    status: 'Aman',
-    min_stok: 5,
-    harga_jual: 120000,
-    kategori: 'Parfum'
-  },
-  {
-    nama_produk_jadi: 'Body Mist Citrus 100ml',
-    sku: 'CIT001',
-    stok_tersedia: 25,
-    status: 'Aman',
-    min_stok: 10,
-    harga_jual: 80000,
-    kategori: 'Body Mist'
-  }
-];
+interface ProdukJadi {
+  id: string;
+  nama_produk_jadi: string;
+  sku: string;
+  harga_jual: number;
+  user_id: string;
+}
+
+interface StokTersedia {
+  nama_produk_jadi: string;
+  sku: string;
+  stok_tersedia: number;
+  status: string;
+  min_stok: number;
+  harga_jual: number;
+  kategori: string;
+}
+
+interface PemakaianBahanWithCost {
+  nama_bahan_baku: string;
+  unit: string;
+  total_terpakai: number;
+  periode: string;
+  harga_per_unit: number;
+  total_biaya: number;
+  kategori: string;
+  supplier: string;
+}
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -168,10 +91,158 @@ const getCategoryColor = (kategori: string) => {
 }
 
 export default function LaporanPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('penjualan');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPeriode, setFilterPeriode] = useState('2024-01');
   const [filterKategori, setFilterKategori] = useState('all');
+  const [loading, setLoading] = useState(true);
+  
+  // State untuk data dari database
+  const [laporanPenjualan, setLaporanPenjualan] = useState<LaporanPenjualan[]>([]);
+  const [laporanPemakaianBahan, setLaporanPemakaianBahan] = useState<PemakaianBahanWithCost[]>([]);
+  const [stokTersedia, setStokTersedia] = useState<StokTersedia[]>([]);
+
+  // Fetch data dari database
+  useEffect(() => {
+    if (user) {
+      fetchAllData();
+    }
+  }, [user, filterPeriode]);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchLaporanPenjualan(),
+        fetchLaporanPemakaianBahan(),
+        fetchStokTersedia()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLaporanPenjualan = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('laporan_penjualan')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('periode', { ascending: false })
+        .order('total_pendapatan', { ascending: false });
+
+      if (error) throw error;
+      setLaporanPenjualan(data || []);
+    } catch (error) {
+      console.error('Error fetching laporan penjualan:', error);
+      setLaporanPenjualan([]);
+    }
+  };
+
+  const fetchLaporanPemakaianBahan = async () => {
+    try {
+      // Fetch pemakaian bahan baku dari view
+      const { data: pemakaianData, error: pemakaianError } = await supabase
+        .from('laporan_pemakaian_bahan_baku')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('periode', { ascending: false })
+        .order('total_terpakai', { ascending: false });
+
+      if (pemakaianError) throw pemakaianError;
+
+      // Fetch data pembelian untuk mendapatkan harga beli
+      const { data: pembelianData, error: pembelianError } = await supabase
+        .from('pembelian')
+        .select(`
+          bahan_baku_id,
+          harga_beli,
+          bahan_baku:bahan_baku_id (
+            nama_bahan_baku
+          )
+        `)
+        .eq('user_id', user?.id);
+
+      if (pembelianError) throw pembelianError;
+
+      // Gabungkan data pemakaian dengan harga beli
+      const enrichedData: PemakaianBahanWithCost[] = (pemakaianData || []).map((item: any) => {
+        const pembelian = pembelianData?.find((p: any) => 
+          p.bahan_baku?.nama_bahan_baku === item.nama_bahan_baku
+        );
+        const hargaPerUnit = pembelian?.harga_beli || 0;
+        
+        return {
+          ...item,
+          harga_per_unit: hargaPerUnit,
+          total_biaya: item.total_terpakai * hargaPerUnit,
+          kategori: 'Bahan Baku', // Default kategori
+          supplier: 'N/A' // Default supplier
+        };
+      });
+
+      setLaporanPemakaianBahan(enrichedData);
+    } catch (error) {
+      console.error('Error fetching laporan pemakaian bahan:', error);
+      setLaporanPemakaianBahan([]);
+    }
+  };
+
+  const fetchStokTersedia = async () => {
+    try {
+      // Fetch produk jadi
+      const { data: produkData, error: produkError } = await supabase
+        .from('produk_jadi')
+        .select('*')
+        .eq('user_id', user?.id);
+
+      if (produkError) throw produkError;
+
+      // Hitung stok tersedia untuk setiap produk menggunakan fungsi database
+      const stokPromises = (produkData || []).map(async (produk) => {
+        const { data: stokData, error: stokError } = await supabase
+          .rpc('hitung_max_produksi', { produk_id: produk.id });
+
+        if (stokError) {
+          console.error('Error calculating stock for', produk.nama_produk_jadi, stokError);
+          return null;
+        }
+
+        const stokTersedia = stokData || 0;
+        const minStok = 5; // Default minimum stock
+        let status = 'Aman';
+        
+        if (stokTersedia <= 0) {
+          status = 'Habis';
+        } else if (stokTersedia <= minStok) {
+          status = 'Rendah';
+        } else if (stokTersedia <= minStok * 2) {
+          status = 'Sedang';
+        }
+
+        return {
+          nama_produk_jadi: produk.nama_produk_jadi,
+          sku: produk.sku,
+          stok_tersedia: stokTersedia,
+          status,
+          min_stok: minStok,
+          harga_jual: produk.harga_jual,
+          kategori: 'Produk Jadi' // Default kategori
+        };
+      });
+
+      const stokResults = await Promise.all(stokPromises);
+      const validStokData = stokResults.filter(item => item !== null) as StokTersedia[];
+      
+      setStokTersedia(validStokData);
+    } catch (error) {
+      console.error('Error fetching stok tersedia:', error);
+      setStokTersedia([]);
+    }
+  };
 
   const handleExportPDF = (reportType: string) => {
     // TODO: Implement PDF export functionality
@@ -204,14 +275,19 @@ export default function LaporanPage() {
     }
   ];
 
-  const totalPendapatan = mockLaporanPenjualan.reduce((sum, item) => sum + item.total_pendapatan, 0);
-  const totalUnitTerjual = mockLaporanPenjualan.reduce((sum, item) => sum + item.total_terjual, 0);
-  const totalBiayaBahan = mockLaporanPemakaianBahan.reduce((sum, item) => sum + item.total_biaya, 0);
-  const avgMargin = mockLaporanPenjualan.reduce((sum, item) => sum + item.margin, 0) / mockLaporanPenjualan.length;
-  const stokRendah = mockStokTersedia.filter(item => item.status === 'Rendah').length;
-  const totalNilaiStok = mockStokTersedia.reduce((sum, item) => sum + (item.stok_tersedia * item.harga_jual), 0);
+  // Perhitungan statistik dari data nyata
+  const totalPendapatan = laporanPenjualan.reduce((sum, item) => sum + (item.total_pendapatan || 0), 0);
+  const totalUnitTerjual = laporanPenjualan.reduce((sum, item) => sum + (item.total_terjual || 0), 0);
+  const totalBiayaBahan = laporanPemakaianBahan.reduce((sum, item) => sum + (item.total_biaya || 0), 0);
+  const stokRendah = stokTersedia.filter(item => item.status === 'Rendah' || item.status === 'Habis').length;
+  const totalNilaiStok = stokTersedia.reduce((sum, item) => sum + (item.stok_tersedia * item.harga_jual), 0);
+  
+  // Hitung margin rata-rata (estimasi sederhana)
+  const avgMargin = totalPendapatan > 0 && totalBiayaBahan > 0 
+    ? ((totalPendapatan - totalBiayaBahan) / totalPendapatan) * 100 
+    : 0;
 
-  const salesColumns = useMemo<ColumnDef<any>[]>(
+  const salesColumns = useMemo<ColumnDef<LaporanPenjualan>[]>(
     () => [
       {
         accessorKey: "nama_produk_jadi",
@@ -234,22 +310,13 @@ export default function LaporanPage() {
         ),
       },
       {
-        accessorKey: "kategori",
-        header: "Kategori",
-        cell: ({ row }) => (
-          <Badge className={getCategoryColor(row.getValue("kategori"))}>
-            {row.getValue("kategori")}
-          </Badge>
-        ),
-      },
-      {
         accessorKey: "total_terjual",
         header: ({ column }) => (
           <SortableHeader column={column}>Unit Terjual</SortableHeader>
         ),
         cell: ({ row }) => (
           <div className="font-medium">
-            {row.getValue("total_terjual")}
+            {row.getValue("total_terjual") || 0}
           </div>
         ),
       },
@@ -260,41 +327,18 @@ export default function LaporanPage() {
         ),
         cell: ({ row }) => (
           <div className="font-semibold text-green-600 dark:text-green-400">
-            {formatCurrency(row.getValue("total_pendapatan"))}
+            {formatCurrency(row.getValue("total_pendapatan") || 0)}
           </div>
         ),
       },
       {
-        accessorKey: "margin",
-        header: ({ column }) => (
-          <SortableHeader column={column}>Margin</SortableHeader>
-        ),
+        accessorKey: "periode",
+        header: "Periode",
         cell: ({ row }) => {
-          const margin = row.getValue("margin") as number;
+          const periode = row.getValue("periode") as string;
           return (
-            <div className="flex items-center gap-2">
-              <div className="w-12 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-purple-500 h-2 rounded-full" 
-                  style={{ width: `${Math.min(margin, 100)}%` }}
-                ></div>
-              </div>
-              <span className="text-sm font-medium">{margin}%</span>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "growth",
-        header: "Growth",
-        cell: ({ row }) => {
-          const growth = row.getValue("growth") as number;
-          return (
-            <div className={`flex items-center gap-1 ${
-              growth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-            }`}>
-              {growth >= 0 ? '↗' : '↘'}
-              <span className="font-medium">{Math.abs(growth)}%</span>
+            <div className="text-gray-600 dark:text-gray-300">
+              {periode ? formatDate(periode) : 'N/A'}
             </div>
           );
         },
@@ -303,7 +347,7 @@ export default function LaporanPage() {
     []
   )
 
-  const materialColumns = useMemo<ColumnDef<any>[]>(
+  const materialColumns = useMemo<ColumnDef<PemakaianBahanWithCost>[]>(
     () => [
       {
         accessorKey: "nama_bahan_baku",
@@ -342,7 +386,7 @@ export default function LaporanPage() {
         cell: ({ row }) => (
           <div className="font-medium">
             <div className="flex items-center gap-1">
-              <span>{row.getValue("total_terpakai")}</span>
+              <span>{row.getValue("total_terpakai") || 0}</span>
               <span className="text-xs text-gray-500">{row.original.unit}</span>
             </div>
           </div>
@@ -355,7 +399,7 @@ export default function LaporanPage() {
         ),
         cell: ({ row }) => (
           <div className="text-gray-600 dark:text-gray-300">
-            {formatCurrency(row.getValue("harga_per_unit"))}
+            {formatCurrency(row.getValue("harga_per_unit") || 0)}
           </div>
         ),
       },
@@ -366,7 +410,7 @@ export default function LaporanPage() {
         ),
         cell: ({ row }) => (
           <div className="font-semibold text-red-600 dark:text-red-400">
-            {formatCurrency(row.getValue("total_biaya"))}
+            {formatCurrency(row.getValue("total_biaya") || 0)}
           </div>
         ),
       },
@@ -374,7 +418,7 @@ export default function LaporanPage() {
     []
   )
 
-  const stockColumns = useMemo<ColumnDef<any>[]>(
+  const stockColumns = useMemo<ColumnDef<StokTersedia>[]>(
     () => [
       {
         accessorKey: "nama_produk_jadi",
@@ -413,7 +457,7 @@ export default function LaporanPage() {
         cell: ({ row }) => (
           <div className="font-medium">
             <div className="flex items-center gap-2">
-              <span>{row.getValue("stok_tersedia")}</span>
+              <span>{row.getValue("stok_tersedia") || 0}</span>
               <span className="text-xs text-gray-500">unit</span>
               {(row.getValue("stok_tersedia") as number) <= row.original.min_stok && (
                 <AlertTriangle className="w-4 h-4 text-orange-500" />
@@ -438,7 +482,7 @@ export default function LaporanPage() {
         ),
         cell: ({ row }) => (
           <div className="font-medium text-blue-600 dark:text-blue-400">
-            {formatCurrency(row.getValue("harga_jual"))}
+            {formatCurrency(row.getValue("harga_jual") || 0)}
           </div>
         ),
       },
@@ -455,26 +499,37 @@ export default function LaporanPage() {
     []
   )
 
-  const filteredPenjualan = mockLaporanPenjualan.filter(item => {
+  const filteredPenjualan = laporanPenjualan.filter(item => {
     const matchesSearch = item.nama_produk_jadi.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.sku.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesKategori = filterKategori === 'all' || item.kategori === filterKategori
-    return matchesSearch && matchesKategori
+    return matchesSearch
   })
 
-  const filteredPemakaian = mockLaporanPemakaianBahan.filter(item => {
+  const filteredPemakaian = laporanPemakaianBahan.filter(item => {
     const matchesSearch = item.nama_bahan_baku.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.supplier.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesKategori = filterKategori === 'all' || item.kategori === filterKategori
-    return matchesSearch && matchesKategori
+    return matchesSearch
   })
 
-  const filteredStok = mockStokTersedia.filter(item => {
+  const filteredStok = stokTersedia.filter(item => {
     const matchesSearch = item.nama_produk_jadi.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.sku.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesKategori = filterKategori === 'all' || item.kategori === filterKategori
-    return matchesSearch && matchesKategori
+    return matchesSearch
   })
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-900">
+        <Navbar title="Laporan" actions={navbarActions} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Memuat data laporan...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-900">
@@ -518,7 +573,7 @@ export default function LaporanPage() {
           />
           <StatCard
             title="Unit Terjual"
-            value={totalUnitTerjual}
+            value={totalUnitTerjual.toString()}
             subtitle="produk terjual"
             icon={BarChart3}
             {...StatCardVariants.primary}
@@ -532,7 +587,7 @@ export default function LaporanPage() {
           />
           <StatCard
             title="Stok Rendah"
-            value={stokRendah}
+            value={stokRendah.toString()}
             subtitle="perlu perhatian"
             icon={AlertTriangle}
             {...StatCardVariants.warning}
@@ -657,32 +712,20 @@ export default function LaporanPage() {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <select
-                    value={filterPeriode}
-                    onChange={(e) => setFilterPeriode(e.target.value)}
-                    className="px-3 py-2 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <Button
+                    variant="outline"
+                    onClick={fetchAllData}
+                    className="bg-white/50 dark:bg-gray-800/50"
                   >
-                    <option value="2024-01">Januari 2024</option>
-                    <option value="2023-12">Desember 2023</option>
-                    <option value="2023-11">November 2023</option>
-                  </select>
-                  <select
-                    value={filterKategori}
-                    onChange={(e) => setFilterKategori(e.target.value)}
-                    className="px-3 py-2 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">Semua Kategori</option>
-                    <option value="Parfum">Parfum</option>
-                    <option value="Body Mist">Body Mist</option>
-                    <option value="Base">Base</option>
-                    <option value="Fragrance">Fragrance</option>
-                  </select>
+                    <Activity className="mr-2 h-4 w-4" />
+                    Refresh
+                  </Button>
                 </div>
               </div>
             </div>
           </CardHeader>
 
-      <CardContent className="p-6">
+          <CardContent className="p-6">
             {/* Tab Content */}
             {activeTab === 'penjualan' && (
               <div className="space-y-4">
@@ -690,7 +733,7 @@ export default function LaporanPage() {
                   <div className="text-center py-12">
                     <TrendingUp className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Tidak ada data penjualan</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Tidak ada data yang sesuai dengan filter yang dipilih.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Belum ada transaksi penjualan yang tercatat.</p>
                   </div>
                 ) : (
                   <DataTable
@@ -709,7 +752,7 @@ export default function LaporanPage() {
                   <div className="text-center py-12">
                     <Activity className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Tidak ada data pemakaian</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Tidak ada data yang sesuai dengan filter yang dipilih.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Belum ada pemakaian bahan baku yang tercatat.</p>
                   </div>
                 ) : (
                   <DataTable
@@ -728,7 +771,7 @@ export default function LaporanPage() {
                   <div className="text-center py-12">
                     <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Tidak ada data stok</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Tidak ada data yang sesuai dengan filter yang dipilih.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Belum ada produk jadi yang terdaftar.</p>
                   </div>
                 ) : (
                   <DataTable

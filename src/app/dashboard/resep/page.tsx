@@ -144,10 +144,22 @@ export default function ResepPage() {
         cell: ({ row }) => (
           <ActionDropdown>
             <DropdownMenuItem 
+              onClick={() => handleDetail(row.original.produk_jadi_id)}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              Detail
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => handleEdit(row.original.produk_jadi_id)}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem 
               onClick={() => handleDelete(row.original.id)}
               className="text-red-600"
             >
-              <MoreHorizontal className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 h-4 w-4" />
               Hapus
             </DropdownMenuItem>
           </ActionDropdown>
@@ -163,6 +175,10 @@ export default function ResepPage() {
 
   const handleEdit = (id: string) => {
     router.push(`/dashboard/resep/edit/${id}`);
+  };
+
+  const handleDetail = (id: string) => {
+    router.push(`/dashboard/resep/detail/${id}`);
   };
 
   const navbarActions = useMemo(() => [

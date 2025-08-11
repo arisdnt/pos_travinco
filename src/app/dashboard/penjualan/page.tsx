@@ -256,8 +256,8 @@ export default function PenjualanPage() {
             <DataTable
               columns={columns}
               data={penjualanData}
-              searchKey="nama_pembeli"
-              searchPlaceholder="Cari pembeli..."
+              searchKey="produk_jadi.nama_produk_jadi"
+              searchPlaceholder="Cari produk..."
             />
           </CardContent>
         </Card>

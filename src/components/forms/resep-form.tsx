@@ -69,8 +69,7 @@ export default function ResepForm({ resep, onClose }: ResepFormProps) {
   const onSubmit = async (data: ResepFormData) => {
     try {
       // TODO: Implement Supabase integration
-      console.log('Resep data:', data);
-      
+      console.log('Form data:', data)
       toast({
         title: resep ? 'Resep berhasil diperbarui' : 'Resep berhasil ditambahkan',
         description: 'Data resep telah disimpan ke database.',

@@ -172,36 +172,32 @@ export default function BahanBakuPage() {
       },
       {
         id: "actions",
+        header: "Aksi",
         enableHiding: false,
         cell: ({ row }) => {
           const item = row.original
           return (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
+            <ActionDropdown>
+              <DropdownMenuItem 
                 onClick={() => router.push(`/dashboard/bahan-baku/detail/${item.id}`)}
-                className="h-8 w-8 p-0"
               >
-                <Eye className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+                <Eye className="mr-2 h-4 w-4" />
+                Lihat Detail
+              </DropdownMenuItem>
+              <DropdownMenuItem 
                 onClick={() => router.push(`/dashboard/bahan-baku/edit/${item.id}`)}
-                className="h-8 w-8 p-0"
               >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem 
                 onClick={() => handleDelete(item.id)}
-                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                className="text-red-600"
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Hapus
+              </DropdownMenuItem>
+            </ActionDropdown>
           )
         },
       },

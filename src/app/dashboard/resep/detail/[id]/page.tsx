@@ -5,10 +5,11 @@ import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Edit, ChefHat, Package, Calculator, AlertTriangle } from 'lucide-react';
+import { ChefHat, Package, Calculator, AlertTriangle, Edit, Trash2, Loader2 } from 'lucide-react';
+import { Navbar } from '@/components/layout/navbar';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { formatNumber, calculateStokTersedia } from '@/lib/utils';
+import { formatNumber, formatCurrency } from '@/lib/utils';
 
 interface ResepDetail {
   id: string;
@@ -20,13 +21,11 @@ interface ResepDetail {
     nama_produk_jadi: string;
     sku: string;
     harga_jual: number;
-    stok: number;
   };
   bahan_baku: {
     id: string;
     nama_bahan_baku: string;
-    satuan: string;
-    kategori: string;
+    unit: string;
     stok: number;
   };
 }
@@ -58,14 +57,12 @@ export default function DetailResepPage() {
             id,
             nama_produk_jadi,
             sku,
-            harga_jual,
-            stok
+            harga_jual
           ),
           bahan_baku (
             id,
             nama_bahan_baku,
-            satuan,
-            kategori,
+            unit,
             stok
           )
         `)
@@ -85,13 +82,14 @@ export default function DetailResepPage() {
       setResepData(resepDetail);
       
       // Calculate maximum production
-      const maxProd = calculateStokTersedia(
-        resepDetail.map(item => ({
-          bahan_baku: { stok: item.bahan_baku.stok },
-          jumlah_dibutuhkan: item.jumlah_dibutuhkan
-        }))
-      );
-      setMaxProduksi(maxProd);
+      let minProduksi = Infinity;
+      resepDetail.forEach(item => {
+        const maxFromThisIngredient = Math.floor(item.bahan_baku.stok / item.jumlah_dibutuhkan);
+        if (maxFromThisIngredient < minProduksi) {
+          minProduksi = maxFromThisIngredient;
+        }
+      });
+      setMaxProduksi(minProduksi === Infinity ? 0 : minProduksi);
     } catch (error) {
       console.error('Error fetching resep:', error);
       toast.error('Gagal memuat data resep');
@@ -105,14 +103,47 @@ export default function DetailResepPage() {
     router.push(`/dashboard/resep/edit/${produkJadiId}`);
   };
 
+  const handleDelete = async () => {
+    const confirmed = window.confirm('Apakah Anda yakin ingin menghapus semua resep untuk produk ini?');
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from('resep')
+        .delete()
+        .eq('produk_jadi_id', produkJadiId);
+
+      if (error) throw error;
+
+      toast.success('Resep berhasil dihapus!');
+      router.push('/dashboard/resep');
+    } catch (error: any) {
+      console.error('Error deleting resep:', error);
+      toast.error(error.message || 'Gagal menghapus resep');
+    }
+  };
+
+  const navbarActions = [
+    {
+      label: "Edit",
+      onClick: handleEdit,
+      icon: Edit,
+      variant: "default" as const
+    },
+    {
+      label: "Hapus",
+      onClick: handleDelete,
+      icon: Trash2,
+      variant: "destructive" as const
+    }
+  ];
+
   if (loading) {
     return (
-      <div className="p-4 mx-auto max-w-6xl md:p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Memuat data...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span>Memuat data...</span>
         </div>
       </div>
     );
@@ -120,18 +151,25 @@ export default function DetailResepPage() {
 
   if (resepData.length === 0) {
     return (
-      <div className="p-4 mx-auto max-w-6xl md:p-6">
-        <div className="text-center py-12">
-          <ChefHat className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Resep tidak ditemukan
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Data resep yang Anda cari tidak dapat ditemukan.
-          </p>
-          <Button onClick={() => router.push('/dashboard/resep')}>
-            Kembali ke Daftar Resep
-          </Button>
+      <div className="flex flex-col h-full">
+        <Navbar 
+          title="Detail Resep" 
+          showBackButton={true}
+          backUrl="/dashboard/resep"
+        />
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
+          <div className="text-center">
+            <ChefHat className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Resep tidak ditemukan
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Data resep yang Anda cari tidak dapat ditemukan.
+            </p>
+            <Button onClick={() => router.push('/dashboard/resep')}>
+              Kembali ke Daftar Resep
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -172,34 +210,14 @@ export default function DetailResepPage() {
   };
 
   return (
-    <div className="p-4 mx-auto max-w-6xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali
-          </Button>
-          <div className="flex items-center gap-2">
-            <ChefHat className="w-6 h-6 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Detail Resep
-            </h1>
-          </div>
-        </div>
-        <Button
-          onClick={handleEdit}
-          className="flex items-center gap-2"
-        >
-          <Edit className="w-4 h-4" />
-          Edit Resep
-        </Button>
-      </div>
+    <div className="flex flex-col h-full">
+      <Navbar 
+        title={`Detail Resep - ${produkJadi.nama_produk_jadi}`}
+        showBackButton={true}
+        backUrl="/dashboard/resep"
+        actions={navbarActions}
+      />
+      <div className="flex-1 p-4 md:p-6 space-y-6">
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Informasi Produk */}
@@ -241,10 +259,10 @@ export default function DetailResepPage() {
 
               <div>
                 <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Stok Tersedia
+                  Harga Jual
                 </label>
                 <p className="text-base text-gray-900 dark:text-white">
-                  {formatNumber(produkJadi.stok)} unit
+                  {formatCurrency(produkJadi.harga_jual)}
                 </p>
               </div>
             </CardContent>
@@ -306,12 +324,9 @@ export default function DetailResepPage() {
                             <h3 className="font-semibold text-gray-900 dark:text-white">
                               {item.bahan_baku.nama_bahan_baku}
                             </h3>
-                            <Badge className={getCategoryColor(item.bahan_baku.kategori)}>
-                              {getCategoryLabel(item.bahan_baku.kategori)}
-                            </Badge>
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Satuan: {item.bahan_baku.satuan}
+                            Satuan: {item.bahan_baku.unit}
                           </p>
                         </div>
 
@@ -321,7 +336,7 @@ export default function DetailResepPage() {
                               Dibutuhkan per Unit
                             </label>
                             <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {formatNumber(item.jumlah_dibutuhkan)} {item.bahan_baku.satuan}
+                              {formatNumber(item.jumlah_dibutuhkan)} {item.bahan_baku.unit}
                             </p>
                           </div>
                           <div>
@@ -329,7 +344,7 @@ export default function DetailResepPage() {
                               Stok Tersedia
                             </label>
                             <p className={`text-sm font-semibold ${stokStatus.color}`}>
-                              {formatNumber(item.bahan_baku.stok)} {item.bahan_baku.satuan}
+                              {formatNumber(item.bahan_baku.stok)} {item.bahan_baku.unit}
                             </p>
                           </div>
                         </div>
@@ -451,6 +466,7 @@ export default function DetailResepPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

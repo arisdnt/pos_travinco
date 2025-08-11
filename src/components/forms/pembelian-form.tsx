@@ -61,8 +61,7 @@ export default function PembelianForm({ pembelian, onClose }: PembelianFormProps
   const onSubmit = async (data: PembelianFormData) => {
     try {
       // TODO: Implement Supabase integration
-      console.log('Pembelian data:', data);
-      
+      console.log('Form data:', data)
       toast({
         title: pembelian ? 'Pembelian berhasil diperbarui' : 'Pembelian berhasil ditambahkan',
         description: 'Data pembelian telah disimpan ke database.',

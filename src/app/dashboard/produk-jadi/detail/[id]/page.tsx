@@ -9,6 +9,7 @@ import { ArrowLeft, Package, Edit, Trash2, Loader2, Calendar, DollarSign, Hash }
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { Navbar } from '@/components/layout/navbar';
 
 interface ProdukJadi {
   id: string;
@@ -90,12 +91,35 @@ export default function DetailProdukJadiPage() {
     }
   };
 
+  // Navbar actions
+  const navbarActions = [
+    {
+      label: 'Edit',
+      onClick: () => router.push(`/dashboard/produk-jadi/edit/${id}`),
+      icon: Edit,
+      variant: 'outline' as const
+    },
+    {
+      label: 'Hapus',
+      onClick: handleDelete,
+      icon: Trash2,
+      variant: 'destructive' as const,
+      disabled: deleting
+    }
+  ];
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex items-center gap-2">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Memuat data...</span>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar 
+          title="Detail Produk Jadi" 
+          showBackButton={true}
+        />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Memuat data...</span>
+          </div>
         </div>
       </div>
     );
@@ -103,67 +127,38 @@ export default function DetailProdukJadiPage() {
 
   if (!produkJadi) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Produk Tidak Ditemukan
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Produk jadi yang Anda cari tidak ditemukan.
-          </p>
-          <Button onClick={() => router.push('/dashboard/produk-jadi')}>
-            Kembali ke Daftar Produk
-          </Button>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar 
+          title="Detail Produk Jadi" 
+          showBackButton={true}
+        />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-center">
+            <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Produk Tidak Ditemukan
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Produk jadi yang Anda cari tidak ditemukan.
+            </p>
+            <Button onClick={() => router.push('/dashboard/produk-jadi')}>
+              Kembali ke Daftar Produk
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 mx-auto max-w-4xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali
-          </Button>
-          <div className="flex items-center gap-2">
-            <Package className="w-6 h-6 text-blue-600" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Detail Produk Jadi
-            </h1>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/dashboard/produk-jadi/edit/${id}`)}
-            className="flex items-center gap-2"
-          >
-            <Edit className="w-4 h-4" />
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleDelete}
-            disabled={deleting}
-            className="flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            {deleting ? 'Menghapus...' : 'Hapus'}
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navbar 
+        title={`Detail - ${produkJadi.nama_produk_jadi}`} 
+        showBackButton={true}
+        actions={navbarActions}
+      />
+      
+      <div className="p-4 md:p-6">
 
       {/* Product Details */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -275,6 +270,7 @@ export default function DetailProdukJadiPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

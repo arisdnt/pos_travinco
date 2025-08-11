@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, BarChart3 } from 'lucide-react';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -60,21 +60,10 @@ export default function LoginForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-blue-900 dark:to-purple-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md">
-        {/* Logo and Brand */}
-        <div className="text-center mb-8">
-          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-            <span className="text-2xl font-bold text-white">T</span>
-          </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Travinco
-          </h1>
-        </div>
+
 
         <Card className="backdrop-blur-sm bg-white/80 dark:bg-gray-900/80 border-0 shadow-2xl">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-2xl font-semibold text-center text-gray-800 dark:text-white">
-              Masuk
-            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleLogin} className="space-y-5">
@@ -134,15 +123,24 @@ export default function LoginForm() {
               </Button>
             </form>
             
+            {/* Button Link ke Laporan Nilam */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => router.push('/nilam')}
+                disabled={isLoading}
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Lihat Laporan Nilam
+              </Button>
+            </div>
 
           </CardContent>
         </Card>
         
-        <div className="text-center mt-8">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            © 2024 Travinco
-          </p>
-        </div>
+
       </div>
     </div>
   );

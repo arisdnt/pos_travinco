@@ -3,33 +3,31 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, ShoppingCart } from 'lucide-react';
+import { Save, ShoppingCart } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { formatDateForDB } from '@/lib/utils';
+import { Navbar } from '@/components/layout/navbar';
 
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  satuan: string;
-  harga_per_unit: number;
+  unit: string;
 }
 
 interface Pembelian {
   id: string;
   bahan_baku_id: string;
   jumlah: number;
-  harga_per_unit: number;
-  total_harga: number;
-  supplier: string;
-  tanggal_pembelian: string;
+  harga_beli: number;
+  tanggal: string;
+  catatan: string;
   bahan_baku: {
     nama_bahan_baku: string;
-    satuan: string;
+    unit: string;
   };
 }
 
@@ -43,10 +41,9 @@ export default function EditPembelianPage() {
   const [formData, setFormData] = useState({
     bahan_baku_id: '',
     jumlah: 0,
-    harga_per_unit: 0,
-    total_harga: 0,
-    supplier: '',
-    tanggal_pembelian: ''
+    harga_beli: 0,
+    tanggal: new Date().toISOString().split('T')[0],
+    catatan: ''
   });
 
   useEffect(() => {
@@ -67,7 +64,7 @@ export default function EditPembelianPage() {
             *,
             bahan_baku (
               nama_bahan_baku,
-              satuan
+              unit
             )
           `)
           .eq('id', id)
@@ -75,7 +72,7 @@ export default function EditPembelianPage() {
           .single(),
         supabase
           .from('bahan_baku')
-          .select('id, nama_bahan_baku, satuan, harga_per_unit')
+          .select('id, nama_bahan_baku, unit')
           .eq('user_id', user.id)
           .order('nama_bahan_baku')
       ]);
@@ -89,10 +86,9 @@ export default function EditPembelianPage() {
       setFormData({
         bahan_baku_id: pembelian.bahan_baku_id,
         jumlah: pembelian.jumlah,
-        harga_per_unit: pembelian.harga_per_unit,
-        total_harga: pembelian.total_harga,
-        supplier: pembelian.supplier,
-        tanggal_pembelian: new Date(pembelian.tanggal_pembelian).toISOString().split('T')[0]
+        harga_beli: pembelian.harga_beli,
+        tanggal: new Date(pembelian.tanggal).toISOString().split('T')[0],
+        catatan: pembelian.catatan || ''
       });
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -103,39 +99,42 @@ export default function EditPembelianPage() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    const numericValue = (name === 'jumlah' || name === 'harga_per_unit') ? parseFloat(value) || 0 : value;
+    const numericValue = (name === 'jumlah' || name === 'harga_beli') ? parseFloat(value) || 0 : value;
     
-    setFormData(prev => {
-      const updated = {
-        ...prev,
-        [name]: numericValue
-      };
-      
-      // Auto calculate total_harga
-      if (name === 'jumlah' || name === 'harga_per_unit') {
-        updated.total_harga = updated.jumlah * updated.harga_per_unit;
-      }
-      
-      return updated;
-    });
-  };
-
-  const handleBahanBakuChange = (value: string) => {
-    const selectedBahan = bahanBakuList.find(b => b.id === value);
     setFormData(prev => ({
       ...prev,
-      bahan_baku_id: value,
-      harga_per_unit: selectedBahan?.harga_per_unit || prev.harga_per_unit,
-      total_harga: prev.jumlah * (selectedBahan?.harga_per_unit || prev.harga_per_unit)
+      [name]: numericValue
+    }));
+  };
+
+  const handleSelectChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (!formData.bahan_baku_id) {
+      toast.error('Pilih bahan baku terlebih dahulu');
+      return;
+    }
 
+    if (formData.jumlah <= 0) {
+      toast.error('Jumlah harus lebih dari 0');
+      return;
+    }
+
+    if (formData.harga_beli <= 0) {
+      toast.error('Harga beli harus lebih dari 0');
+      return;
+    }
+
+    setLoading(true);
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -148,10 +147,9 @@ export default function EditPembelianPage() {
         .update({
           bahan_baku_id: formData.bahan_baku_id,
           jumlah: formData.jumlah,
-          harga_per_unit: formData.harga_per_unit,
-          total_harga: formData.total_harga,
-          supplier: formData.supplier,
-          tanggal_pembelian: formatDateForDB(new Date(formData.tanggal_pembelian))
+          harga_beli: formData.harga_beli,
+          tanggal: new Date(formData.tanggal).toISOString(),
+          catatan: formData.catatan || null
         })
         .eq('id', id)
         .eq('user_id', user.id);
@@ -168,13 +166,33 @@ export default function EditPembelianPage() {
     }
   };
 
+  const navbarActions = [
+    {
+      label: 'Simpan Perubahan',
+      onClick: () => {
+        const form = document.getElementById('pembelian-form') as HTMLFormElement;
+        if (form) {
+          form.requestSubmit();
+        }
+      },
+      icon: Save,
+      variant: 'default' as const
+    }
+  ];
+
   if (initialLoading) {
     return (
-      <div className="p-4 mx-auto max-w-4xl md:p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Memuat data...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar 
+          title="Edit Pembelian" 
+          showBackButton={true}
+        />
+        <div className="p-4 md:p-6">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600 dark:text-gray-400">Memuat data...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -184,42 +202,29 @@ export default function EditPembelianPage() {
   const selectedBahan = bahanBakuList.find(b => b.id === formData.bahan_baku_id);
 
   return (
-    <div className="p-4 mx-auto max-w-4xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => router.back()}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Kembali
-        </Button>
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="w-6 h-6 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Edit Pembelian
-          </h1>
-        </div>
-      </div>
-
-      {/* Form */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5" />
-            Informasi Pembelian
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="bahan_baku_id">Bahan Baku *</Label>
-                <Select
-                  value={formData.bahan_baku_id}
-                  onValueChange={handleBahanBakuChange}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navbar 
+        title="Edit Pembelian" 
+        showBackButton={true}
+        actions={navbarActions}
+      />
+      
+      <div className="p-4 md:p-6">
+        <Card className="w-full shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Informasi Pembelian
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form id="pembelian-form" onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bahan_baku_id">Bahan Baku *</Label>
+                  <Select
+                    value={formData.bahan_baku_id}
+                    onValueChange={(value) => handleSelectChange('bahan_baku_id', value)}
                   required
                 >
                   <SelectTrigger>
@@ -228,7 +233,7 @@ export default function EditPembelianPage() {
                   <SelectContent>
                     {bahanBakuList.map((bahan) => (
                       <SelectItem key={bahan.id} value={bahan.id}>
-                        {bahan.nama_bahan_baku} ({bahan.satuan})
+                        {bahan.nama_bahan_baku}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -236,109 +241,72 @@ export default function EditPembelianPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="supplier">Supplier *</Label>
+                <Label htmlFor="tanggal">Tanggal Pembelian *</Label>
                 <Input
-                  id="supplier"
-                  name="supplier"
-                  value={formData.supplier}
+                  id="tanggal"
+                  name="tanggal"
+                  type="date"
+                  value={formData.tanggal}
                   onChange={handleInputChange}
-                  placeholder="Masukkan nama supplier"
                   required
                   className="w-full"
                 />
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="jumlah">Jumlah *</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="jumlah"
-                    name="jumlah"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.jumlah}
-                    onChange={handleInputChange}
-                    placeholder="Masukkan jumlah"
-                    required
-                    className="flex-1"
-                  />
-                  {selectedBahan && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {selectedBahan.satuan}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="harga_per_unit">Harga per Unit *</Label>
                 <Input
-                  id="harga_per_unit"
-                  name="harga_per_unit"
+                  id="jumlah"
+                  name="jumlah"
                   type="number"
-                  min="0"
+                  value={formData.jumlah}
+                  onChange={handleInputChange}
+                  placeholder="Masukkan jumlah"
+                  min="1"
                   step="0.01"
-                  value={formData.harga_per_unit}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan harga per unit"
                   required
                   className="w-full"
                 />
-              </div>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="tanggal_pembelian">Tanggal Pembelian *</Label>
-                <Input
-                  id="tanggal_pembelian"
-                  name="tanggal_pembelian"
-                  type="date"
-                  value={formData.tanggal_pembelian}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full"
-                />
+                {selectedBahan && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Satuan: {selectedBahan.unit}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="total_harga">Total Harga</Label>
+                <Label htmlFor="harga_beli">Harga Beli *</Label>
                 <Input
-                  id="total_harga"
-                  name="total_harga"
+                  id="harga_beli"
+                  name="harga_beli"
                   type="number"
-                  value={formData.total_harga}
-                  readOnly
-                  className="w-full bg-gray-50 dark:bg-gray-800"
-                  placeholder="Otomatis terhitung"
+                  value={formData.harga_beli}
+                  onChange={handleInputChange}
+                  placeholder="Masukkan harga beli"
+                  required
+                  className="w-full"
                 />
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="flex-1 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {loading ? 'Menyimpan...' : 'Perbarui Pembelian'}
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="catatan">Catatan</Label>
+              <Textarea
+                id="catatan"
+                name="catatan"
+                value={formData.catatan}
+                onChange={handleInputChange}
+                placeholder="Catatan tambahan (opsional)"
+                rows={3}
+                className="w-full"
+              />
             </div>
           </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

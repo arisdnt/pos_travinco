@@ -5,22 +5,26 @@ import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, ChefHat, Plus, Trash2 } from 'lucide-react';
+import { Save, ChefHat, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Navbar } from '@/components/layout/navbar';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  satuan: string;
+  unit: string;
+  stok: number;
 }
 
 interface ProdukJadi {
   id: string;
   nama_produk_jadi: string;
+  sku: string;
+  harga_jual: number;
 }
 
 interface ResepItem {
@@ -36,10 +40,13 @@ interface Resep {
   jumlah_dibutuhkan: number;
   produk_jadi: {
     nama_produk_jadi: string;
+    sku: string;
+    harga_jual: number;
   };
   bahan_baku: {
     nama_bahan_baku: string;
-    satuan: string;
+    unit: string;
+    stok: number;
   };
 }
 
@@ -75,23 +82,26 @@ export default function EditResepPage() {
           .select(`
             *,
             produk_jadi (
-              nama_produk_jadi
+              nama_produk_jadi,
+              sku,
+              harga_jual
             ),
             bahan_baku (
               nama_bahan_baku,
-              satuan
+              unit,
+              stok
             )
           `)
           .eq('produk_jadi_id', produkJadiId)
           .eq('user_id', user.id),
         supabase
           .from('bahan_baku')
-          .select('id, nama_bahan_baku, satuan')
+          .select('id, nama_bahan_baku, unit, stok')
           .eq('user_id', user.id)
           .order('nama_bahan_baku'),
         supabase
           .from('produk_jadi')
-          .select('id, nama_produk_jadi')
+          .select('id, nama_produk_jadi, sku, harga_jual')
           .eq('user_id', user.id)
           .order('nama_produk_jadi')
       ]);
@@ -216,53 +226,62 @@ export default function EditResepPage() {
         .from('resep')
         .insert(resepData);
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific constraint violation errors
+        if (error.code === '23505' && error.message.includes('resep_produk_jadi_id_bahan_baku_id_key')) {
+          toast.error('Kombinasi produk dan bahan baku sudah ada dalam resep. Periksa kembali data yang dimasukkan.');
+          return;
+        }
+        throw error;
+      }
 
       toast.success('Resep berhasil diperbarui!');
       router.push('/dashboard/resep');
     } catch (error: any) {
       console.error('Error updating resep:', error);
-      toast.error(error.message || 'Gagal memperbarui resep');
+      if (error.code === '23505') {
+        toast.error('Data duplikat terdeteksi. Periksa kembali resep yang akan diperbarui.');
+      } else {
+        toast.error(error.message || 'Gagal memperbarui resep');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const navbarActions = [
+    {
+      label: "Simpan",
+      onClick: () => handleSubmit({} as React.FormEvent),
+      icon: Save,
+      variant: "default" as const,
+      disabled: loading
+    }
+  ];
+
   if (initialLoading) {
     return (
-      <div className="p-4 mx-auto max-w-4xl md:p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Memuat data...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span>Memuat data...</span>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="p-4 mx-auto max-w-4xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => router.back()}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Kembali
-        </Button>
-        <div className="flex items-center gap-2">
-          <ChefHat className="w-6 h-6 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Edit Resep
-          </h1>
-        </div>
-      </div>
+  const selectedProduk = produkJadiList.find(p => p.id === formData.produk_jadi_id);
 
-      {/* Form */}
+  return (
+    <div className="flex flex-col h-full">
+      <Navbar 
+        title={selectedProduk ? `Edit Resep - ${selectedProduk.nama_produk_jadi}` : "Edit Resep"}
+        showBackButton={true}
+        backUrl="/dashboard/resep"
+        actions={navbarActions}
+      />
+      <div className="flex-1 p-4 md:p-6">
+        {/* Form */}
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -374,7 +393,7 @@ export default function EditResepPage() {
                           />
                           {selectedBahan && (
                             <span className="text-sm text-gray-500 dark:text-gray-400">
-                              {selectedBahan.satuan}
+                              {selectedBahan.unit}
                             </span>
                           )}
                         </div>
@@ -420,6 +439,7 @@ export default function EditResepPage() {
           </form>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

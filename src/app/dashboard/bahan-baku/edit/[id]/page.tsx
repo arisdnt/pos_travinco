@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, Package, Loader2 } from 'lucide-react';
+import { Package, Save, Loader2 } from 'lucide-react';
+import { Navbar } from '@/components/layout/navbar';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -21,11 +21,8 @@ export default function EditBahanBakuPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [formData, setFormData] = useState({
     nama_bahan_baku: '',
-    kategori: '',
-    satuan: '',
-    harga_per_unit: 0,
-    supplier: '',
-    deskripsi: ''
+    stok: 0,
+    unit: ''
   });
 
   useEffect(() => {
@@ -47,11 +44,8 @@ export default function EditBahanBakuPage() {
       if (data) {
         setFormData({
           nama_bahan_baku: data.nama_bahan_baku,
-          kategori: data.kategori,
-          satuan: data.satuan,
-          harga_per_unit: data.harga_per_unit,
-          supplier: data.supplier,
-          deskripsi: ''
+          stok: data.stok,
+          unit: data.unit
         });
       }
     } catch (error: any) {
@@ -63,11 +57,11 @@ export default function EditBahanBakuPage() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'harga_per_unit' ? parseFloat(value) || 0 : value
+      [name]: name === 'stok' ? parseFloat(value) || 0 : value
     }));
   };
 
@@ -93,10 +87,8 @@ export default function EditBahanBakuPage() {
         .from('bahan_baku')
         .update({
           nama_bahan_baku: formData.nama_bahan_baku,
-          kategori: formData.kategori,
-          satuan: formData.satuan,
-          harga_per_unit: formData.harga_per_unit,
-          supplier: formData.supplier
+          stok: formData.stok,
+          unit: formData.unit
         })
         .eq('id', id)
         .eq('user_id', user.id);
@@ -113,6 +105,18 @@ export default function EditBahanBakuPage() {
     }
   };
 
+  const navbarActions = [
+    {
+      label: "Simpan",
+      onClick: () => {
+        const form = document.getElementById('bahan-baku-form') as HTMLFormElement;
+        if (form) form.requestSubmit();
+      },
+      icon: Save,
+      variant: "default" as const
+    }
+  ];
+
   if (initialLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -125,158 +129,117 @@ export default function EditBahanBakuPage() {
   }
 
   return (
-    <div className="p-4 mx-auto max-w-4xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => router.back()}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Kembali
-        </Button>
-        <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Edit Bahan Baku
-          </h1>
-        </div>
+    <div className="flex flex-col h-full">
+      <Navbar 
+        title="Edit Bahan Baku" 
+        showBackButton={true}
+        backUrl="/dashboard/bahan-baku"
+        actions={navbarActions}
+      />
+
+      <div className="flex-1 p-4 md:p-6 space-y-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-900">
+        {/* Form Card */}
+        <Card className="w-full overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6 shadow-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-white">
+              <Package className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              Informasi Bahan Baku
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form id="bahan-baku-form" onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="nama_bahan_baku" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Nama Bahan Baku *
+                  </Label>
+                  <Input
+                    id="nama_bahan_baku"
+                    name="nama_bahan_baku"
+                    value={formData.nama_bahan_baku}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan nama bahan baku"
+                    required
+                    className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="stok" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Stok *
+                  </Label>
+                  <Input
+                    id="stok"
+                    name="stok"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.stok}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan stok"
+                    required
+                    className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="unit" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Unit/Satuan *
+                  </Label>
+                  <Select
+                    value={formData.unit}
+                    onValueChange={(value) => handleSelectChange('unit', value)}
+                    required
+                  >
+                    <SelectTrigger className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <SelectValue placeholder="Pilih unit/satuan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ml">ml (mililiter)</SelectItem>
+                      <SelectItem value="gram">gram</SelectItem>
+                      <SelectItem value="kg">kg (kilogram)</SelectItem>
+                      <SelectItem value="liter">liter</SelectItem>
+                      <SelectItem value="pcs">pcs (pieces)</SelectItem>
+                      <SelectItem value="bottle">bottle</SelectItem>
+                      <SelectItem value="oz">oz (ounce)</SelectItem>
+                      <SelectItem value="lb">lb (pound)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/dashboard/bahan-baku')}
+                  disabled={loading}
+                  className="px-6 py-2 transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200 flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Simpan Perubahan
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* Form */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Informasi Bahan Baku
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="nama_bahan_baku">Nama Bahan Baku *</Label>
-                <Input
-                  id="nama_bahan_baku"
-                  name="nama_bahan_baku"
-                  value={formData.nama_bahan_baku}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan nama bahan baku"
-                  required
-                  className="w-full"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="kategori">Kategori *</Label>
-                <Select
-                  value={formData.kategori}
-                  onValueChange={(value) => handleSelectChange('kategori', value)}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="essential_oil">Essential Oil</SelectItem>
-                    <SelectItem value="carrier_oil">Carrier Oil</SelectItem>
-                    <SelectItem value="alcohol">Alcohol</SelectItem>
-                    <SelectItem value="fixative">Fixative</SelectItem>
-                    <SelectItem value="packaging">Packaging</SelectItem>
-                    <SelectItem value="other">Lainnya</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="satuan">Satuan *</Label>
-                <Select
-                  value={formData.satuan}
-                  onValueChange={(value) => handleSelectChange('satuan', value)}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih satuan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ml">ml (mililiter)</SelectItem>
-                    <SelectItem value="gram">gram</SelectItem>
-                    <SelectItem value="kg">kg (kilogram)</SelectItem>
-                    <SelectItem value="liter">liter</SelectItem>
-                    <SelectItem value="pcs">pcs (pieces)</SelectItem>
-                    <SelectItem value="bottle">bottle</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="harga_per_unit">Harga per Unit *</Label>
-                <Input
-                  id="harga_per_unit"
-                  name="harga_per_unit"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.harga_per_unit}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan harga per unit"
-                  required
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="supplier">Supplier *</Label>
-              <Input
-                id="supplier"
-                name="supplier"
-                value={formData.supplier}
-                onChange={handleInputChange}
-                placeholder="Masukkan nama supplier"
-                required
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="deskripsi">Deskripsi</Label>
-              <Textarea
-                id="deskripsi"
-                name="deskripsi"
-                value={formData.deskripsi}
-                onChange={handleInputChange}
-                placeholder="Masukkan deskripsi bahan baku (opsional)"
-                rows={4}
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="flex-1 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
 }

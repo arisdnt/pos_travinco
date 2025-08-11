@@ -145,7 +145,7 @@ export default function PembelianPage() {
         header: "Aksi",
         cell: ({ row }) => (
           <ActionDropdown>
-            <DropdownMenuItem onClick={() => router.push(`/dashboard/pembelian/${row.original.id}`)}>
+            <DropdownMenuItem onClick={() => router.push(`/dashboard/pembelian/detail/${row.original.id}`)}>
               <Eye className="mr-2 h-4 w-4" />
               Detail
             </DropdownMenuItem>

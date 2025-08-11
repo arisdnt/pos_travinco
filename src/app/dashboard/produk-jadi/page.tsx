@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Package, Package2, TrendingUp, DollarSign, AlertTriangle, Eye } from 'lucide-react';
 import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-table';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -157,30 +158,25 @@ export default function ProdukJadiPage() {
         header: "Aksi",
         cell: ({ row }) => (
           <ActionDropdown>
-            <Button
-              variant="ghost"
-              size="sm"
+            <DropdownMenuItem 
               onClick={() => router.push(`/dashboard/produk-jadi/detail/${row.original.id}`)}
-              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
             >
-              <Eye className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+              <Eye className="mr-2 h-4 w-4" />
+              Detail
+            </DropdownMenuItem>
+            <DropdownMenuItem 
               onClick={() => handleEdit(row.original.id)}
-              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
             >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem 
               onClick={() => handleDelete(row.original.id)}
-              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+              className="text-red-600"
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Hapus
+            </DropdownMenuItem>
           </ActionDropdown>
         ),
       },

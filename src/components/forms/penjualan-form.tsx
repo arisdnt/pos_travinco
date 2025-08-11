@@ -96,12 +96,7 @@ export default function PenjualanForm({ penjualan, onClose }: PenjualanFormProps
       }
 
       // TODO: Implement Supabase integration
-      console.log('Penjualan data:', {
-        ...data,
-        total_harga: totalHarga,
-        harga_satuan: selectedProduk?.harga_jual
-      });
-      
+      console.log('Form data:', data)
       toast({
         title: penjualan ? 'Penjualan berhasil diperbarui' : 'Penjualan berhasil ditambahkan',
         description: 'Data penjualan telah disimpan ke database.',

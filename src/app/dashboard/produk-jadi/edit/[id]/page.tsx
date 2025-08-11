@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Save, Package, Loader2 } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { Navbar } from '@/components/layout/navbar';
 
 export default function EditProdukJadiPage() {
   const router = useRouter();
@@ -21,8 +22,7 @@ export default function EditProdukJadiPage() {
   const [formData, setFormData] = useState({
     nama_produk_jadi: '',
     sku: '',
-    harga_jual: 0,
-    deskripsi: ''
+    harga_jual: 0
   });
 
   useEffect(() => {
@@ -45,8 +45,7 @@ export default function EditProdukJadiPage() {
         setFormData({
           nama_produk_jadi: data.nama_produk_jadi,
           sku: data.sku,
-          harga_jual: data.harga_jual,
-          deskripsi: ''
+          harga_jual: data.harga_jual
         });
       }
     } catch (error: any) {
@@ -99,126 +98,123 @@ export default function EditProdukJadiPage() {
     }
   };
 
+  // Navbar actions
+  const navbarActions = [
+    {
+      label: 'Simpan Perubahan',
+      onClick: () => {
+        const form = document.getElementById('produk-form') as HTMLFormElement;
+        if (form) {
+          form.requestSubmit();
+        }
+      },
+      icon: Save,
+      variant: 'default' as const,
+      disabled: loading
+    }
+  ];
+
   if (initialLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex items-center gap-2">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Memuat data...</span>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar 
+          title="Edit Produk Jadi" 
+          showBackButton={true}
+        />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Memuat data...</span>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 mx-auto max-w-4xl md:p-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => router.back()}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Kembali
-        </Button>
-        <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Edit Produk Jadi
-          </h1>
-        </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navbar 
+        title="Edit Produk Jadi" 
+        showBackButton={true}
+        actions={navbarActions}
+      />
+      
+      <div className="p-4 md:p-6">
+        <Card className="w-full shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Informasi Produk Jadi
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form id="produk-form" onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="nama_produk_jadi">Nama Produk Jadi *</Label>
+                  <Input
+                    id="nama_produk_jadi"
+                    name="nama_produk_jadi"
+                    value={formData.nama_produk_jadi}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan nama produk jadi"
+                    required
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="sku">SKU *</Label>
+                  <Input
+                    id="sku"
+                    name="sku"
+                    value={formData.sku}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan SKU produk"
+                    required
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="harga_jual">Harga Jual *</Label>
+                  <Input
+                    id="harga_jual"
+                    name="harga_jual"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.harga_jual}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan harga jual"
+                    required
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.back()}
+                  className="w-full sm:flex-1"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full sm:flex-1 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* Form */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Informasi Produk Jadi
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="nama_produk_jadi">Nama Produk Jadi *</Label>
-                <Input
-                  id="nama_produk_jadi"
-                  name="nama_produk_jadi"
-                  value={formData.nama_produk_jadi}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan nama produk jadi"
-                  required
-                  className="w-full"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="sku">SKU *</Label>
-                <Input
-                  id="sku"
-                  name="sku"
-                  value={formData.sku}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan SKU produk"
-                  required
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="harga_jual">Harga Jual *</Label>
-              <Input
-                id="harga_jual"
-                name="harga_jual"
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.harga_jual}
-                onChange={handleInputChange}
-                placeholder="Masukkan harga jual"
-                required
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="deskripsi">Deskripsi</Label>
-              <Textarea
-                id="deskripsi"
-                name="deskripsi"
-                value={formData.deskripsi}
-                onChange={handleInputChange}
-                placeholder="Masukkan deskripsi produk (opsional)"
-                rows={4}
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.back()}
-                className="flex-1"
-              >
-                Batal
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="flex-1 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
 }

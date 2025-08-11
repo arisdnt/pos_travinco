@@ -47,20 +47,15 @@ export function BahanBakuForm({ item, onClose, onSuccess }: BahanBakuFormProps) 
     setIsLoading(true)
     try {
       // TODO: Implement Supabase integration
-      console.log("Form data:", data)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      console.log('Form data:', data)
       toast({
         title: "Berhasil",
-        description: item 
-          ? "Bahan baku berhasil diperbarui" 
-          : "Bahan baku berhasil ditambahkan",
+        description: item ? "Bahan baku berhasil diperbarui" : "Bahan baku berhasil ditambahkan",
       })
-      
       onSuccess()
+      onClose()
     } catch (error) {
+      console.error('Error:', error)
       toast({
         title: "Error",
         description: "Terjadi kesalahan saat menyimpan data",
@@ -72,71 +67,78 @@ export function BahanBakuForm({ item, onClose, onSuccess }: BahanBakuFormProps) 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>
-              {item ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
-            </CardTitle>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-lg font-semibold">
+          {item ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
+        </CardTitle>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-6 w-6 p-0"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="nama_bahan_baku">Nama Bahan Baku</Label>
+            <Input
+              id="nama_bahan_baku"
+              {...register("nama_bahan_baku")}
+              placeholder="Masukkan nama bahan baku"
+            />
+            {errors.nama_bahan_baku && (
+              <p className="text-sm text-red-500">{errors.nama_bahan_baku.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stok">Stok</Label>
+            <Input
+              id="stok"
+              type="number"
+              {...register("stok", { valueAsNumber: true })}
+              placeholder="Masukkan jumlah stok"
+            />
+            {errors.stok && (
+              <p className="text-sm text-red-500">{errors.stok.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="unit">Unit</Label>
+            <Input
+              id="unit"
+              {...register("unit")}
+              placeholder="Masukkan unit (kg, liter, pcs, dll)"
+            />
+            {errors.unit && (
+              <p className="text-sm text-red-500">{errors.unit.message}</p>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="flex-1"
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1"
+            >
+              {isLoading ? "Menyimpan..." : item ? "Perbarui" : "Simpan"}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nama_bahan_baku">Nama Bahan Baku</Label>
-              <Input
-                id="nama_bahan_baku"
-                {...register("nama_bahan_baku")}
-                placeholder="Masukkan nama bahan baku"
-              />
-              {errors.nama_bahan_baku && (
-                <p className="text-sm text-red-500">
-                  {errors.nama_bahan_baku.message}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="stok">Stok</Label>
-              <Input
-                id="stok"
-                type="number"
-                step="0.01"
-                {...register("stok", { valueAsNumber: true })}
-                placeholder="Masukkan jumlah stok"
-              />
-              {errors.stok && (
-                <p className="text-sm text-red-500">{errors.stok.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit">Unit</Label>
-              <Input
-                id="unit"
-                {...register("unit")}
-                placeholder="ml, gr, buah, dll"
-              />
-              {errors.unit && (
-                <p className="text-sm text-red-500">{errors.unit.message}</p>
-              )}
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Batal
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Menyimpan..." : "Simpan"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

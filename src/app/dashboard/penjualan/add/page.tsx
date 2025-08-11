@@ -18,7 +18,6 @@ interface ProdukJadi {
   id: string;
   nama_produk_jadi: string;
   harga_jual: number;
-  unit: string;
 }
 
 interface PenjualanItem {
@@ -53,7 +52,7 @@ function AddPenjualanPage() {
     try {
       const { data, error } = await supabase
         .from('produk_jadi')
-        .select('id, nama_produk_jadi, harga_jual, unit')
+        .select('id, nama_produk_jadi, harga_jual')
         .order('nama_produk_jadi');
 
       if (error) throw error;
@@ -309,11 +308,7 @@ function AddPenjualanPage() {
                                 ))}
                               </SelectContent>
                             </Select>
-                            {selectedProduk && (
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Satuan: {selectedProduk.unit}
-                              </p>
-                            )}
+
                           </div>
 
                           <div className="space-y-2">

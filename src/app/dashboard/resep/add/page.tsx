@@ -100,8 +100,12 @@ export default function AddResepPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted!');
+    console.log('Form data:', formData);
+    console.log('Resep items:', resepItems);
     
     if (!formData.produk_jadi_id) {
+      console.log('Error: No product selected');
       toast.error('Pilih produk jadi terlebih dahulu');
       return;
     }
@@ -109,8 +113,10 @@ export default function AddResepPage() {
     const validResepItems = resepItems.filter(item => 
       item.bahan_baku_id && item.jumlah_dibutuhkan > 0
     );
+    console.log('Valid resep items:', validResepItems);
 
     if (validResepItems.length === 0) {
+      console.log('Error: No valid resep items');
       toast.error('Tambahkan minimal satu bahan baku');
       return;
     }
@@ -118,17 +124,49 @@ export default function AddResepPage() {
     // Check for duplicate bahan_baku_id
     const bahanBakuIds = validResepItems.map(item => item.bahan_baku_id);
     const uniqueBahanBakuIds = Array.from(new Set(bahanBakuIds));
+    console.log('Bahan baku IDs:', bahanBakuIds);
+    console.log('Unique bahan baku IDs:', uniqueBahanBakuIds);
     if (bahanBakuIds.length !== uniqueBahanBakuIds.length) {
+      console.log('Error: Duplicate bahan baku detected');
       toast.error('Tidak boleh ada bahan baku yang sama dalam satu resep');
       return;
     }
 
+    console.log('Starting form submission process...');
     setLoading(true);
     try {
+      console.log('Getting current user...');
       const user = await getCurrentUser();
       if (!user) {
+        console.log('Error: User not logged in');
         toast.error('Anda harus login terlebih dahulu');
         return;
+      }
+      console.log('User found:', user.id);
+
+      // Check if recipe already exists for this product
+      console.log('Checking for existing recipe...');
+      const { data: existingResep, error: checkError } = await supabase
+        .from('resep')
+        .select('id')
+        .eq('produk_jadi_id', formData.produk_jadi_id)
+        .limit(1);
+      console.log('Existing resep check result:', existingResep, checkError);
+
+      if (checkError) throw checkError;
+
+      if (existingResep && existingResep.length > 0) {
+        const confirmEdit = window.confirm(
+          'Resep untuk produk ini sudah ada. Apakah Anda ingin mengedit resep yang sudah ada?'
+        );
+        
+        if (confirmEdit) {
+          router.push(`/dashboard/resep/edit/${formData.produk_jadi_id}`);
+          return;
+        } else {
+          toast.error('Silakan pilih produk lain atau edit resep yang sudah ada.');
+          return;
+        }
       }
 
       const resepData = validResepItems.map(item => ({
@@ -137,18 +175,32 @@ export default function AddResepPage() {
         jumlah_dibutuhkan: item.jumlah_dibutuhkan,
         user_id: user.id
       }));
+      console.log('Resep data to insert:', resepData);
 
+      console.log('Inserting resep data to database...');
       const { error } = await supabase
         .from('resep')
         .insert(resepData);
+      console.log('Insert result - error:', error);
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific constraint violation errors
+        if (error.code === '23505' && error.message.includes('resep_produk_jadi_id_bahan_baku_id_key')) {
+          toast.error('Kombinasi produk dan bahan baku sudah ada dalam resep. Periksa kembali data yang dimasukkan.');
+          return;
+        }
+        throw error;
+      }
 
       toast.success('Resep berhasil ditambahkan!');
       router.push('/dashboard/resep');
     } catch (error: any) {
       console.error('Error adding resep:', error);
-      toast.error(error.message || 'Gagal menambahkan resep');
+      if (error.code === '23505') {
+        toast.error('Data duplikat terdeteksi. Periksa kembali resep yang akan ditambahkan.');
+      } else {
+        toast.error(error.message || 'Gagal menambahkan resep');
+      }
     } finally {
       setLoading(false);
     }
@@ -158,9 +210,14 @@ export default function AddResepPage() {
     {
       label: 'Simpan Resep',
       onClick: () => {
+        console.log('Save button clicked!');
         const form = document.getElementById('resep-form') as HTMLFormElement;
+        console.log('Form element found:', form);
         if (form) {
+          console.log('Submitting form...');
           form.requestSubmit();
+        } else {
+          console.log('Error: Form element not found!');
         }
       },
       icon: Save,
