@@ -136,7 +136,7 @@ export default function DetailPenjualanPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar title="Detail Penjualan" showBackButton />
         <div className="p-4 md:p-6">
           <div className="flex items-center justify-center h-64">
@@ -152,7 +152,7 @@ export default function DetailPenjualanPage() {
 
   if (!penjualan) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar title="Detail Penjualan" showBackButton />
         <div className="p-4 md:p-6">
           <div className="text-center py-12">
@@ -176,7 +176,7 @@ export default function DetailPenjualanPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar
         title="Detail Penjualan"
         showBackButton

@@ -20,7 +20,9 @@ interface Pembelian {
   bahan_baku: {
     id: string;
     nama_bahan_baku: string;
-    unit: string;
+    unit_dasar?: {
+      nama_unit: string;
+    };
   };
 }
 
@@ -133,7 +135,7 @@ export default function DetailPembelianPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar title="Detail Pembelian" showBackButton />
         <div className="p-4 md:p-6">
           <div className="flex items-center justify-center h-64">
@@ -149,7 +151,7 @@ export default function DetailPembelianPage() {
 
   if (!pembelian) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar title="Detail Pembelian" showBackButton />
         <div className="p-4 md:p-6">
           <div className="text-center py-12">
@@ -173,7 +175,7 @@ export default function DetailPembelianPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar
         title="Detail Pembelian"
         showBackButton
@@ -204,7 +206,7 @@ export default function DetailPembelianPage() {
                   Satuan
                 </label>
                 <p className="text-base text-gray-900 dark:text-white">
-                  {pembelian.bahan_baku.unit}
+                  {pembelian.bahan_baku.unit_dasar?.nama_unit || '-'}
                 </p>
               </div>
             </CardContent>
@@ -224,7 +226,7 @@ export default function DetailPembelianPage() {
                   Jumlah
                 </label>
                 <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {pembelian.jumlah.toLocaleString('id-ID')} {pembelian.bahan_baku.unit}
+                  {pembelian.jumlah.toLocaleString('id-ID')} {pembelian.bahan_baku.unit_dasar?.nama_unit || ''}
                 </p>
               </div>
 
@@ -315,7 +317,7 @@ export default function DetailPembelianPage() {
                         {pembelian.jumlah.toLocaleString('id-ID')}
                       </span>
                       <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
-                        {pembelian.bahan_baku.unit}
+                        {pembelian.bahan_baku.unit_dasar?.nama_unit || ''}
                       </span>
                     </div>
                   </div>

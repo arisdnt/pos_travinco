@@ -148,21 +148,46 @@ export default function EditPenjualanPage() {
         return;
       }
 
+      // Check stock availability for the new quantity
+      const { data: stokCheck, error: stokError } = await supabase
+        .rpc('check_stok_tersedia', {
+          produk_id: formData.produk_jadi_id,
+          jumlah_jual: formData.jumlah
+        });
+
+      if (stokError) {
+        console.error('Error checking stock:', stokError);
+        toast.error('Gagal memeriksa stok bahan baku');
+        return;
+      }
+
+      if (!stokCheck) {
+        const produk = produkJadiList.find(p => p.id === formData.produk_jadi_id);
+        toast.error(`Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi}`);
+        return;
+      }
+
+      // Note: Editing penjualan is complex because it affects stock.
+      // For now, we only allow editing basic info, not quantities that affect stock.
+      // In a production system, you might want to:
+      // 1. Reverse the original stock changes
+      // 2. Apply new stock changes
+      // 3. Or restrict editing to non-stock-affecting fields only
+      
       const { error } = await supabase
         .from('penjualan')
         .update({
-          produk_jadi_id: formData.produk_jadi_id,
-          jumlah: formData.jumlah,
-          total_harga: formData.total_harga,
           tanggal: formData.tanggal,
           catatan: formData.catatan || null
+          // Note: Not updating produk_jadi_id or jumlah to avoid stock inconsistencies
+          // total_harga is calculated by database trigger
         })
         .eq('id', id)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
-      toast.success('Penjualan berhasil diperbarui');
+      toast.success('Informasi penjualan berhasil diperbarui');
       router.push(`/dashboard/penjualan/detail/${id}`);
     } catch (error) {
       console.error('Error updating penjualan:', error);
@@ -174,7 +199,7 @@ export default function EditPenjualanPage() {
 
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar title="Edit Penjualan" showBackButton />
         <div className="p-4 md:p-6">
           <div className="flex items-center justify-center h-64">
@@ -191,7 +216,7 @@ export default function EditPenjualanPage() {
   const selectedProduk = produkJadiList.find(p => p.id === formData.produk_jadi_id);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar title="Edit Penjualan" showBackButton />
       
       <div className="p-4 md:p-6">
@@ -204,63 +229,35 @@ export default function EditPenjualanPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Header Info */}
-              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
+              {/* Info Notice */}
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <strong>Catatan:</strong> Untuk menjaga konsistensi stok, hanya tanggal dan catatan yang dapat diedit. 
+                  Produk dan jumlah tidak dapat diubah karena sudah mempengaruhi stok bahan baku.
+                </p>
+              </div>
+
+              {/* Current Product Info - Read Only */}
+              <div className="space-y-4">
+                <Label className="text-lg font-semibold">Informasi Penjualan</Label>
+                <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="produk_jadi_id">Produk <span className="text-red-500">*</span></Label>
-                    <Select value={formData.produk_jadi_id} onValueChange={handleSelectChange}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih produk" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {produkJadiList.map((produk) => (
-                          <SelectItem key={produk.id} value={produk.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{produk.nama_produk_jadi}</span>
-                              <span className="text-sm text-gray-500">
-                                {produk.sku} - {formatCurrency(produk.harga_jual)}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Produk</Label>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {selectedProduk?.nama_produk_jadi || '-'}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {selectedProduk?.sku} - {selectedProduk ? formatCurrency(selectedProduk.harga_jual) : '-'}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="tanggal">Tanggal Penjualan <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="tanggal"
-                      name="tanggal"
-                      type="date"
-                      value={formData.tanggal}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="jumlah">Jumlah <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="jumlah"
-                      name="jumlah"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={formData.jumlah}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Harga Satuan</Label>
+                    <Label>Jumlah</Label>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border">
                       <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {selectedProduk ? formatCurrency(selectedProduk.harga_jual) : '-'}
+                        {formData.jumlah.toLocaleString('id-ID')} unit
                       </p>
                     </div>
                   </div>
@@ -274,6 +271,23 @@ export default function EditPenjualanPage() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Editable Fields */}
+              <div className="space-y-4">
+                <Label className="text-lg font-semibold">Edit Informasi</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="tanggal">Tanggal Penjualan <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="tanggal"
+                    name="tanggal"
+                    type="date"
+                    value={formData.tanggal}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="catatan">Catatan</Label>
@@ -288,46 +302,7 @@ export default function EditPenjualanPage() {
                   />
                 </div>
 
-                {/* Summary Section */}
-                {selectedProduk && (
-                  <div className="space-y-4">
-                    <Label className="text-lg font-semibold">Ringkasan Penjualan</Label>
-                    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
-                      <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border">
-                        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                          Produk
-                        </p>
-                        <p className="text-lg font-semibold text-blue-700 dark:text-blue-300">
-                          {selectedProduk.nama_produk_jadi}
-                        </p>
-                        <p className="text-sm text-blue-600 dark:text-blue-400">
-                          {selectedProduk.sku}
-                        </p>
-                      </div>
-                      
-                      <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border">
-                        <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                          Jumlah
-                        </p>
-                        <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                          {formData.jumlah.toLocaleString('id-ID')}
-                        </p>
-                        <p className="text-sm text-purple-600 dark:text-purple-400">
-                          unit
-                        </p>
-                      </div>
 
-                      <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border">
-                        <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                          Total Harga
-                        </p>
-                        <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                          {formatCurrency(formData.total_harga)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -342,7 +317,7 @@ export default function EditPenjualanPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={loading || !formData.produk_jadi_id}
+                    disabled={loading}
                     className="flex items-center justify-center gap-2 w-full sm:w-auto sm:flex-1"
                   >
                     <Save className="w-4 h-4" />

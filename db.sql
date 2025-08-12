@@ -5,7 +5,7 @@
 -- Dumped from database version 17.4
 -- Dumped by pg_dump version 17.0
 
--- Started on 2025-08-11 07:36:49
+-- Started on 2025-08-13 00:15:47
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -30,7 +30,7 @@ CREATE SCHEMA public;
 ALTER SCHEMA public OWNER TO pg_database_owner;
 
 --
--- TOC entry 3756 (class 0 OID 0)
+-- TOC entry 3886 (class 0 OID 0)
 -- Dependencies: 13
 -- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pg_database_owner
 --
@@ -39,7 +39,7 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 
 
 --
--- TOC entry 405 (class 1255 OID 17271)
+-- TOC entry 427 (class 1255 OID 17271)
 -- Name: check_stok_tersedia(uuid, numeric); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -74,7 +74,77 @@ $$;
 ALTER FUNCTION public.check_stok_tersedia(produk_id uuid, jumlah_jual numeric) OWNER TO postgres;
 
 --
--- TOC entry 406 (class 1255 OID 17272)
+-- TOC entry 429 (class 1255 OID 18772)
+-- Name: handle_pembelian_stok(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.handle_pembelian_stok() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    jumlah_dalam_satuan_dasar numeric;
+    kemasan_record RECORD;
+BEGIN
+    -- Jika ada kemasan_id, konversi ke satuan dasar
+    IF NEW.kemasan_id IS NOT NULL THEN
+        SELECT nilai_konversi INTO jumlah_dalam_satuan_dasar
+        FROM kemasan 
+        WHERE id = NEW.kemasan_id;
+        
+        jumlah_dalam_satuan_dasar := NEW.jumlah * jumlah_dalam_satuan_dasar;
+    ELSE
+        -- Jika tidak ada kemasan, anggap sudah dalam satuan dasar
+        jumlah_dalam_satuan_dasar := NEW.jumlah;
+    END IF;
+
+    -- Jika pembelian dari reservasi stok, kurangi stok di supplier
+    IF NEW.asal_barang = 'reservasi' AND NEW.supplier_id IS NOT NULL THEN
+        -- Validasi kemasan harus sesuai dengan reservasi
+        IF NEW.kemasan_id IS NOT NULL THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM reservasi_stok_supplier r
+                WHERE r.bahan_baku_id = NEW.bahan_baku_id 
+                AND r.supplier_id = NEW.supplier_id
+                AND (r.kemasan_id = NEW.kemasan_id OR r.kemasan_id IS NULL)
+                AND r.jumlah_reservasi >= jumlah_dalam_satuan_dasar
+            ) THEN
+                RAISE EXCEPTION 'Kemasan tidak sesuai dengan reservasi atau stok reservasi tidak mencukupi';
+            END IF;
+        END IF;
+
+        -- Kurangi stok reservasi
+        UPDATE reservasi_stok_supplier
+        SET jumlah_reservasi = jumlah_reservasi - jumlah_dalam_satuan_dasar,
+            updated_at = NOW()
+        WHERE bahan_baku_id = NEW.bahan_baku_id 
+        AND supplier_id = NEW.supplier_id
+        AND (kemasan_id = NEW.kemasan_id OR (kemasan_id IS NULL AND NEW.kemasan_id IS NULL));
+    END IF;
+
+    -- Tambah stok di gudang sendiri (selalu terjadi)
+    UPDATE bahan_baku
+    SET stok = stok + jumlah_dalam_satuan_dasar
+    WHERE id = NEW.bahan_baku_id;
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.handle_pembelian_stok() OWNER TO postgres;
+
+--
+-- TOC entry 3889 (class 0 OID 0)
+-- Dependencies: 429
+-- Name: FUNCTION handle_pembelian_stok(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION public.handle_pembelian_stok() IS 'Fungsi trigger untuk menangani pembelian stok dengan validasi kemasan yang ketat. 
+Memastikan kemasan pembelian sesuai dengan kemasan reservasi.';
+
+
+--
+-- TOC entry 428 (class 1255 OID 17272)
 -- Name: hitung_max_produksi(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -115,28 +185,24 @@ $$;
 ALTER FUNCTION public.hitung_max_produksi(produk_id uuid) OWNER TO postgres;
 
 --
--- TOC entry 403 (class 1255 OID 17269)
--- Name: update_stok_pembelian(); Type: FUNCTION; Schema: public; Owner: postgres
+-- TOC entry 430 (class 1255 OID 18774)
+-- Name: update_reservasi_timestamp(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.update_stok_pembelian() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
+CREATE FUNCTION public.update_reservasi_timestamp() RETURNS trigger
+    LANGUAGE plpgsql
     AS $$
 BEGIN
-    -- Tambah stok bahan baku
-    UPDATE public.bahan_baku 
-    SET stok = stok + NEW.jumlah 
-    WHERE id = NEW.bahan_baku_id;
-    
+    NEW.updated_at = now();
     RETURN NEW;
 END;
 $$;
 
 
-ALTER FUNCTION public.update_stok_pembelian() OWNER TO postgres;
+ALTER FUNCTION public.update_reservasi_timestamp() OWNER TO postgres;
 
 --
--- TOC entry 404 (class 1255 OID 17270)
+-- TOC entry 426 (class 1255 OID 17270)
 -- Name: update_stok_penjualan(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -174,12 +240,57 @@ $$;
 
 ALTER FUNCTION public.update_stok_penjualan() OWNER TO postgres;
 
+--
+-- TOC entry 431 (class 1255 OID 20028)
+-- Name: validate_reservasi_consistency(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.validate_reservasi_consistency() RETURNS TABLE(reservasi_id uuid, supplier_nama text, bahan_baku_nama text, kemasan_nama text, jumlah_reservasi numeric, masalah text)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        r.id,
+        s.nama_supplier,
+        bb.nama_bahan_baku,
+        COALESCE(k.nama_kemasan, 'Satuan Dasar'),
+        r.jumlah_reservasi,
+        CASE 
+            WHEN r.jumlah_reservasi < 0 THEN 'Jumlah reservasi negatif'
+            WHEN r.jumlah_reservasi = 0 THEN 'Jumlah reservasi kosong'
+            WHEN r.kemasan_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM kemasan k2
+                WHERE k2.id = r.kemasan_id 
+                AND k2.unit_dasar_id = bb.unit_dasar_id
+            ) THEN 'Kemasan tidak sesuai unit dasar'
+            ELSE 'OK'
+        END
+    FROM reservasi_stok_supplier r
+    JOIN suppliers s ON r.supplier_id = s.id
+    JOIN bahan_baku bb ON r.bahan_baku_id = bb.id
+    LEFT JOIN kemasan k ON r.kemasan_id = k.id;
+END;
+$$;
+
+
+ALTER FUNCTION public.validate_reservasi_consistency() OWNER TO postgres;
+
+--
+-- TOC entry 3894 (class 0 OID 0)
+-- Dependencies: 431
+-- Name: FUNCTION validate_reservasi_consistency(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION public.validate_reservasi_consistency() IS 'Fungsi untuk validasi konsistensi data reservasi stok dan mendeteksi masalah.';
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- TOC entry 286 (class 1259 OID 17273)
+-- TOC entry 300 (class 1259 OID 17273)
 -- Name: bahan_baku; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -187,16 +298,17 @@ CREATE TABLE public.bahan_baku (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     nama_bahan_baku text NOT NULL,
     stok numeric DEFAULT 0 NOT NULL,
-    unit text NOT NULL,
     user_id uuid,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    kategori_id uuid,
+    unit_dasar_id uuid
 );
 
 
 ALTER TABLE public.bahan_baku OWNER TO postgres;
 
 --
--- TOC entry 290 (class 1259 OID 17350)
+-- TOC entry 304 (class 1259 OID 17350)
 -- Name: penjualan; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -214,7 +326,7 @@ CREATE TABLE public.penjualan (
 ALTER TABLE public.penjualan OWNER TO postgres;
 
 --
--- TOC entry 287 (class 1259 OID 17288)
+-- TOC entry 301 (class 1259 OID 17288)
 -- Name: produk_jadi; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -231,7 +343,7 @@ CREATE TABLE public.produk_jadi (
 ALTER TABLE public.produk_jadi OWNER TO postgres;
 
 --
--- TOC entry 288 (class 1259 OID 17305)
+-- TOC entry 302 (class 1259 OID 17305)
 -- Name: resep; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -247,14 +359,30 @@ CREATE TABLE public.resep (
 ALTER TABLE public.resep OWNER TO postgres;
 
 --
--- TOC entry 293 (class 1259 OID 17465)
+-- TOC entry 308 (class 1259 OID 18680)
+-- Name: unit_dasar; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.unit_dasar (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    nama_unit text NOT NULL,
+    deskripsi text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.unit_dasar OWNER TO postgres;
+
+--
+-- TOC entry 314 (class 1259 OID 19966)
 -- Name: bahan_baku_terlaris_detail; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.bahan_baku_terlaris_detail AS
  SELECT bb.id AS bahan_baku_id,
     bb.nama_bahan_baku,
-    bb.unit,
+    ud.nama_unit,
     bb.stok AS stok_tersisa,
     COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) AS total_terpakai,
     count(DISTINCT pj.id) AS jumlah_produk_menggunakan,
@@ -263,25 +391,26 @@ CREATE VIEW public.bahan_baku_terlaris_detail AS
     EXTRACT(month FROM CURRENT_DATE) AS bulan,
     EXTRACT(year FROM CURRENT_DATE) AS tahun,
     bb.user_id
-   FROM (((public.bahan_baku bb
+   FROM ((((public.bahan_baku bb
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
      LEFT JOIN public.resep r ON ((bb.id = r.bahan_baku_id)))
      LEFT JOIN public.produk_jadi pj ON ((r.produk_jadi_id = pj.id)))
      LEFT JOIN public.penjualan p ON (((pj.id = p.produk_jadi_id) AND (date_trunc('month'::text, p.tanggal) = date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)))))
-  GROUP BY bb.id, bb.nama_bahan_baku, bb.unit, bb.stok, bb.user_id
+  GROUP BY bb.id, bb.nama_bahan_baku, ud.nama_unit, bb.stok, bb.user_id
   ORDER BY COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC, bb.nama_bahan_baku;
 
 
 ALTER VIEW public.bahan_baku_terlaris_detail OWNER TO postgres;
 
 --
--- TOC entry 295 (class 1259 OID 17475)
+-- TOC entry 316 (class 1259 OID 19976)
 -- Name: bahan_baku_terlaris_filter; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.bahan_baku_terlaris_filter AS
  SELECT bb.id AS bahan_baku_id,
     bb.nama_bahan_baku,
-    bb.unit,
+    ud.nama_unit,
     bb.stok AS stok_tersisa,
     COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) AS total_terpakai,
     count(DISTINCT pj.id) AS jumlah_produk_menggunakan,
@@ -292,33 +421,35 @@ CREATE VIEW public.bahan_baku_terlaris_filter AS
     bb.user_id,
     lower(bb.nama_bahan_baku) AS nama_bahan_baku_lower,
     lower(string_agg(DISTINCT pj.nama_produk_jadi, ' '::text)) AS produk_search_text
-   FROM (((public.bahan_baku bb
+   FROM ((((public.bahan_baku bb
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
      LEFT JOIN public.resep r ON ((bb.id = r.bahan_baku_id)))
      LEFT JOIN public.produk_jadi pj ON ((r.produk_jadi_id = pj.id)))
      LEFT JOIN public.penjualan p ON ((pj.id = p.produk_jadi_id)))
   WHERE (p.tanggal IS NOT NULL)
-  GROUP BY bb.id, bb.nama_bahan_baku, bb.unit, bb.stok, bb.user_id, (date_trunc('month'::text, p.tanggal))
+  GROUP BY bb.id, bb.nama_bahan_baku, ud.nama_unit, bb.stok, bb.user_id, (date_trunc('month'::text, p.tanggal))
   ORDER BY COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC, bb.nama_bahan_baku;
 
 
 ALTER VIEW public.bahan_baku_terlaris_filter OWNER TO postgres;
 
 --
--- TOC entry 294 (class 1259 OID 17470)
+-- TOC entry 315 (class 1259 OID 19971)
 -- Name: bahan_baku_top20_chart; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.bahan_baku_top20_chart AS
  SELECT bb.nama_bahan_baku,
-    bb.unit,
+    ud.nama_unit,
     COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) AS total_terpakai,
     row_number() OVER (ORDER BY COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC) AS ranking,
     bb.user_id
-   FROM (((public.bahan_baku bb
+   FROM ((((public.bahan_baku bb
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
      LEFT JOIN public.resep r ON ((bb.id = r.bahan_baku_id)))
      LEFT JOIN public.produk_jadi pj ON ((r.produk_jadi_id = pj.id)))
      LEFT JOIN public.penjualan p ON (((pj.id = p.produk_jadi_id) AND (date_trunc('month'::text, p.tanggal) = date_trunc('month'::text, (CURRENT_DATE)::timestamp with time zone)))))
-  GROUP BY bb.id, bb.nama_bahan_baku, bb.unit, bb.user_id
+  GROUP BY bb.id, bb.nama_bahan_baku, ud.nama_unit, bb.user_id
   ORDER BY COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC
  LIMIT 20;
 
@@ -326,14 +457,14 @@ CREATE VIEW public.bahan_baku_top20_chart AS
 ALTER VIEW public.bahan_baku_top20_chart OWNER TO postgres;
 
 --
--- TOC entry 296 (class 1259 OID 17480)
+-- TOC entry 318 (class 1259 OID 19986)
 -- Name: dashboard_bahan_baku_terlaris; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.dashboard_bahan_baku_terlaris AS
  SELECT bahan_baku_id,
     nama_bahan_baku,
-    unit,
+    nama_unit,
     stok_tersisa,
     total_terpakai,
     jumlah_produk_menggunakan,
@@ -341,49 +472,68 @@ CREATE VIEW public.dashboard_bahan_baku_terlaris AS
     periode_bulan_ini,
     bulan,
     tahun,
-    user_id,
-    round(((total_terpakai / NULLIF(sum(total_terpakai) OVER (PARTITION BY user_id), (0)::numeric)) * (100)::numeric), 2) AS persentase_pemakaian,
-        CASE
-            WHEN (stok_tersisa <= (0)::numeric) THEN 'Habis'::text
-            WHEN (stok_tersisa <= (10)::numeric) THEN 'Stok Rendah'::text
-            WHEN (stok_tersisa <= (50)::numeric) THEN 'Stok Normal'::text
-            ELSE 'Stok Aman'::text
-        END AS status_stok,
-        CASE
-            WHEN (total_terpakai = (0)::numeric) THEN 'Tidak Terpakai'::text
-            WHEN (total_terpakai <= (50)::numeric) THEN 'Pemakaian Rendah'::text
-            WHEN (total_terpakai <= (200)::numeric) THEN 'Pemakaian Sedang'::text
-            ELSE 'Pemakaian Tinggi'::text
-        END AS kategori_pemakaian
-   FROM public.bahan_baku_terlaris_detail
-  WHERE (total_terpakai >= (0)::numeric)
-  ORDER BY total_terpakai DESC, nama_bahan_baku;
+    user_id
+   FROM public.bahan_baku_terlaris_detail;
 
 
 ALTER VIEW public.dashboard_bahan_baku_terlaris OWNER TO postgres;
 
 --
--- TOC entry 291 (class 1259 OID 17372)
+-- TOC entry 307 (class 1259 OID 18663)
+-- Name: kategori; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kategori (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    nama_kategori text NOT NULL,
+    deskripsi text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.kategori OWNER TO postgres;
+
+--
+-- TOC entry 309 (class 1259 OID 18697)
+-- Name: kemasan; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kemasan (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    nama_kemasan text NOT NULL,
+    unit_dasar_id uuid NOT NULL,
+    nilai_konversi numeric NOT NULL,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.kemasan OWNER TO postgres;
+
+--
+-- TOC entry 313 (class 1259 OID 19961)
 -- Name: laporan_pemakaian_bahan_baku; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.laporan_pemakaian_bahan_baku AS
  SELECT bb.nama_bahan_baku,
-    bb.unit,
+    ud.nama_unit,
     COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) AS total_terpakai,
     date_trunc('month'::text, p.tanggal) AS periode,
     bb.user_id
-   FROM ((public.bahan_baku bb
+   FROM (((public.bahan_baku bb
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
      LEFT JOIN public.resep r ON ((bb.id = r.bahan_baku_id)))
      LEFT JOIN public.penjualan p ON ((r.produk_jadi_id = p.produk_jadi_id)))
-  GROUP BY bb.id, bb.nama_bahan_baku, bb.unit, bb.user_id, (date_trunc('month'::text, p.tanggal))
+  GROUP BY bb.id, bb.nama_bahan_baku, ud.nama_unit, bb.user_id, (date_trunc('month'::text, p.tanggal))
   ORDER BY (date_trunc('month'::text, p.tanggal)) DESC, COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC;
 
 
 ALTER VIEW public.laporan_pemakaian_bahan_baku OWNER TO postgres;
 
 --
--- TOC entry 292 (class 1259 OID 17377)
+-- TOC entry 305 (class 1259 OID 17377)
 -- Name: laporan_penjualan; Type: VIEW; Schema: public; Owner: postgres
 --
 
@@ -403,7 +553,7 @@ CREATE VIEW public.laporan_penjualan AS
 ALTER VIEW public.laporan_penjualan OWNER TO postgres;
 
 --
--- TOC entry 289 (class 1259 OID 17330)
+-- TOC entry 303 (class 1259 OID 17330)
 -- Name: pembelian; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -414,63 +564,262 @@ CREATE TABLE public.pembelian (
     harga_beli numeric DEFAULT 0,
     tanggal timestamp with time zone DEFAULT now() NOT NULL,
     catatan text,
-    user_id uuid
+    user_id uuid,
+    supplier_id uuid,
+    kemasan_id uuid,
+    asal_barang text DEFAULT 'langsung'::text NOT NULL,
+    CONSTRAINT check_asal_barang CHECK ((asal_barang = ANY (ARRAY['langsung'::text, 'reservasi'::text])))
 );
 
 
 ALTER TABLE public.pembelian OWNER TO postgres;
 
 --
--- TOC entry 297 (class 1259 OID 17485)
+-- TOC entry 310 (class 1259 OID 18719)
+-- Name: reservasi_stok_supplier; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.reservasi_stok_supplier (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    bahan_baku_id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    jumlah_reservasi numeric NOT NULL,
+    catatan text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    kemasan_id uuid
+);
+
+
+ALTER TABLE public.reservasi_stok_supplier OWNER TO postgres;
+
+--
+-- TOC entry 3910 (class 0 OID 0)
+-- Dependencies: 310
+-- Name: COLUMN reservasi_stok_supplier.kemasan_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.reservasi_stok_supplier.kemasan_id IS 'Reference to packaging unit used during input (for tracking purposes). The jumlah_reservasi is always stored in base unit.';
+
+
+--
+-- TOC entry 306 (class 1259 OID 18648)
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.suppliers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    nama_supplier text NOT NULL,
+    kontak text,
+    alamat text,
+    user_id uuid,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.suppliers OWNER TO postgres;
+
+--
+-- TOC entry 317 (class 1259 OID 19981)
 -- Name: trend_pemakaian_bahan_baku; Type: VIEW; Schema: public; Owner: postgres
 --
 
 CREATE VIEW public.trend_pemakaian_bahan_baku AS
  SELECT bb.id AS bahan_baku_id,
     bb.nama_bahan_baku,
-    bb.unit,
+    ud.nama_unit,
     date_trunc('month'::text, p.tanggal) AS periode,
     EXTRACT(month FROM date_trunc('month'::text, p.tanggal)) AS bulan,
     EXTRACT(year FROM date_trunc('month'::text, p.tanggal)) AS tahun,
     COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) AS total_terpakai,
     count(DISTINCT p.id) AS jumlah_transaksi,
     bb.user_id
-   FROM (((public.bahan_baku bb
+   FROM ((((public.bahan_baku bb
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
      LEFT JOIN public.resep r ON ((bb.id = r.bahan_baku_id)))
      LEFT JOIN public.produk_jadi pj ON ((r.produk_jadi_id = pj.id)))
      LEFT JOIN public.penjualan p ON ((pj.id = p.produk_jadi_id)))
   WHERE (p.tanggal >= date_trunc('month'::text, (CURRENT_DATE - '3 mons'::interval)))
-  GROUP BY bb.id, bb.nama_bahan_baku, bb.unit, bb.user_id, (date_trunc('month'::text, p.tanggal))
+  GROUP BY bb.id, bb.nama_bahan_baku, ud.nama_unit, bb.user_id, (date_trunc('month'::text, p.tanggal))
   ORDER BY (date_trunc('month'::text, p.tanggal)) DESC, COALESCE(sum((r.jumlah_dibutuhkan * p.jumlah)), (0)::numeric) DESC;
 
 
 ALTER VIEW public.trend_pemakaian_bahan_baku OWNER TO postgres;
 
 --
--- TOC entry 3746 (class 0 OID 17273)
--- Dependencies: 286
+-- TOC entry 319 (class 1259 OID 20023)
+-- Name: v_reservasi_stok_monitoring; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.v_reservasi_stok_monitoring AS
+ SELECT r.id,
+    r.jumlah_reservasi,
+    r.created_at,
+    r.updated_at,
+    bb.nama_bahan_baku,
+    s.nama_supplier,
+        CASE
+            WHEN (r.kemasan_id IS NOT NULL) THEN k.nama_kemasan
+            ELSE (ud.nama_unit || ' (Satuan Dasar)'::text)
+        END AS kemasan_display,
+        CASE
+            WHEN (r.kemasan_id IS NOT NULL) THEN ((round((r.jumlah_reservasi / k.nilai_konversi), 2) || ' '::text) || k.nama_kemasan)
+            ELSE ((r.jumlah_reservasi || ' '::text) || ud.nama_unit)
+        END AS jumlah_display,
+    r.catatan,
+        CASE
+            WHEN (r.jumlah_reservasi > (0)::numeric) THEN 'Aktif'::text
+            ELSE 'Habis'::text
+        END AS status
+   FROM ((((public.reservasi_stok_supplier r
+     JOIN public.bahan_baku bb ON ((r.bahan_baku_id = bb.id)))
+     JOIN public.suppliers s ON ((r.supplier_id = s.id)))
+     JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
+     LEFT JOIN public.kemasan k ON ((r.kemasan_id = k.id)))
+  ORDER BY r.updated_at DESC;
+
+
+ALTER VIEW public.v_reservasi_stok_monitoring OWNER TO postgres;
+
+--
+-- TOC entry 3914 (class 0 OID 0)
+-- Dependencies: 319
+-- Name: VIEW v_reservasi_stok_monitoring; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON VIEW public.v_reservasi_stok_monitoring IS 'View untuk monitoring reservasi stok dengan informasi kemasan yang user-friendly.';
+
+
+--
+-- TOC entry 312 (class 1259 OID 19956)
+-- Name: view_bahan_baku_detail; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.view_bahan_baku_detail AS
+ SELECT bb.id,
+    bb.nama_bahan_baku,
+    bb.stok,
+    bb.kategori_id,
+    bb.unit_dasar_id,
+    bb.user_id,
+    bb.created_at,
+    k.nama_kategori,
+    ud.nama_unit
+   FROM ((public.bahan_baku bb
+     LEFT JOIN public.kategori k ON ((bb.kategori_id = k.id)))
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)));
+
+
+ALTER VIEW public.view_bahan_baku_detail OWNER TO postgres;
+
+--
+-- TOC entry 320 (class 1259 OID 20061)
+-- Name: view_pembelian_detail; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.view_pembelian_detail AS
+ SELECT p.id,
+    p.jumlah,
+    p.harga_beli,
+    p.tanggal,
+    p.catatan,
+    p.asal_barang,
+    bb.nama_bahan_baku,
+    s.nama_supplier,
+    kem.nama_kemasan,
+    kem.nilai_konversi,
+    ud.nama_unit,
+    p.user_id
+   FROM ((((public.pembelian p
+     JOIN public.bahan_baku bb ON ((p.bahan_baku_id = bb.id)))
+     LEFT JOIN public.suppliers s ON ((p.supplier_id = s.id)))
+     LEFT JOIN public.kemasan kem ON ((p.kemasan_id = kem.id)))
+     LEFT JOIN public.unit_dasar ud ON ((kem.unit_dasar_id = ud.id)));
+
+
+ALTER VIEW public.view_pembelian_detail OWNER TO postgres;
+
+--
+-- TOC entry 311 (class 1259 OID 18776)
+-- Name: view_reservasi_stok_detail; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.view_reservasi_stok_detail AS
+ SELECT rss.id,
+    rss.jumlah_reservasi,
+    rss.catatan,
+    rss.created_at,
+    rss.updated_at,
+    bb.nama_bahan_baku,
+    bb.stok AS stok_gudang,
+    s.nama_supplier,
+    s.kontak AS kontak_supplier,
+    ud.nama_unit,
+    k.nama_kategori,
+    rss.user_id
+   FROM ((((public.reservasi_stok_supplier rss
+     JOIN public.bahan_baku bb ON ((rss.bahan_baku_id = bb.id)))
+     JOIN public.suppliers s ON ((rss.supplier_id = s.id)))
+     LEFT JOIN public.unit_dasar ud ON ((bb.unit_dasar_id = ud.id)))
+     LEFT JOIN public.kategori k ON ((bb.kategori_id = k.id)));
+
+
+ALTER VIEW public.view_reservasi_stok_detail OWNER TO postgres;
+
+--
+-- TOC entry 3871 (class 0 OID 17273)
+-- Dependencies: 300
 -- Data for Name: bahan_baku; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.bahan_baku (id, nama_bahan_baku, stok, unit, user_id, created_at) FROM stdin;
-a0188910-24b7-4e1f-9a43-621fc9b05ff8	BIBIT SECADAL	100	ml	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-10 15:12:04.238514+00
+COPY public.bahan_baku (id, nama_bahan_baku, stok, user_id, created_at, kategori_id, unit_dasar_id) FROM stdin;
+23bb32d5-4fd0-49a2-aaaa-96e5a93910ac	Botol Lelabo 30 ML	0	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 13:44:23.241644+00	903dba41-842f-4cc2-8173-7d3fae93a565	820ffd81-7a02-4a36-ad73-486504f0fe5f
+0bc7f68f-25f4-4392-96e6-ed13a90248f1	PARFUM - ONE MILION	200	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 13:36:19.549975+00	337313c1-390e-4c0c-b40a-bd2d1c5b24fc	bb0f9e26-83de-4ccf-9866-9f50820f61bc
 \.
 
 
 --
--- TOC entry 3749 (class 0 OID 17330)
--- Dependencies: 289
+-- TOC entry 3877 (class 0 OID 18663)
+-- Dependencies: 307
+-- Data for Name: kategori; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.kategori (id, nama_kategori, deskripsi, user_id, created_at) FROM stdin;
+337313c1-390e-4c0c-b40a-bd2d1c5b24fc	Bibit Parfum	Bibit Parfum 100%	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 11:07:39.880942+00
+903dba41-842f-4cc2-8173-7d3fae93a565	Botol	\N	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 13:43:12.624085+00
+\.
+
+
+--
+-- TOC entry 3879 (class 0 OID 18697)
+-- Dependencies: 309
+-- Data for Name: kemasan; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.kemasan (id, nama_kemasan, unit_dasar_id, nilai_konversi, user_id, created_at) FROM stdin;
+aea969ec-a4d6-4389-9ffb-716506ff0684	100 Ml	bb0f9e26-83de-4ccf-9866-9f50820f61bc	100	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 10:50:44.991447+00
+fe38d95a-1b34-4e69-93a6-ced51f81a3b5	500 Ml	bb0f9e26-83de-4ccf-9866-9f50820f61bc	500	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 10:57:11.883274+00
+d297982b-4441-453b-9e13-a05de32e173c	1 Liter	bb0f9e26-83de-4ccf-9866-9f50820f61bc	1000	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 10:57:24.987233+00
+0195694d-724a-4f55-8cc0-c86ff8ddb251	Lusin	820ffd81-7a02-4a36-ad73-486504f0fe5f	12	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 13:43:39.258286+00
+\.
+
+
+--
+-- TOC entry 3874 (class 0 OID 17330)
+-- Dependencies: 303
 -- Data for Name: pembelian; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.pembelian (id, bahan_baku_id, jumlah, harga_beli, tanggal, catatan, user_id) FROM stdin;
-1313920d-619d-4834-a793-7b8603e2e6a6	a0188910-24b7-4e1f-9a43-621fc9b05ff8	100	20000	2025-08-10 00:00:00+00	\N	3798ff14-acf7-40bd-a6bd-819f8479b880
+COPY public.pembelian (id, bahan_baku_id, jumlah, harga_beli, tanggal, catatan, user_id, supplier_id, kemasan_id, asal_barang) FROM stdin;
+3f93d17a-3ad2-462a-9dcf-b29c8bf8927e	0bc7f68f-25f4-4392-96e6-ed13a90248f1	1	250000	2025-08-12 00:00:00+00	\N	3798ff14-acf7-40bd-a6bd-819f8479b880	bc219ee7-5945-468c-8dea-b68da385b53f	aea969ec-a4d6-4389-9ffb-716506ff0684	reservasi
+0d9a5f1b-29fa-45f1-8c19-375bbe43bde6	0bc7f68f-25f4-4392-96e6-ed13a90248f1	1	2500000	2025-08-12 00:00:00+00	\N	3798ff14-acf7-40bd-a6bd-819f8479b880	bc219ee7-5945-468c-8dea-b68da385b53f	aea969ec-a4d6-4389-9ffb-716506ff0684	reservasi
 \.
 
 
 --
--- TOC entry 3750 (class 0 OID 17350)
--- Dependencies: 290
+-- TOC entry 3875 (class 0 OID 17350)
+-- Dependencies: 304
 -- Data for Name: penjualan; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -479,29 +828,64 @@ COPY public.penjualan (id, produk_jadi_id, jumlah, total_harga, tanggal, catatan
 
 
 --
--- TOC entry 3747 (class 0 OID 17288)
--- Dependencies: 287
+-- TOC entry 3872 (class 0 OID 17288)
+-- Dependencies: 301
 -- Data for Name: produk_jadi; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.produk_jadi (id, nama_produk_jadi, sku, harga_jual, user_id, created_at) FROM stdin;
-935d6b56-2f9d-4e7d-91b8-1976f4856935	TRADIN	52	5000	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-10 14:21:37.928798+00
+4cebe159-502c-4537-8531-209a80458931	ONE MILION - 30 ML	ONE317057	25000	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 13:45:24.670878+00
 \.
 
 
 --
--- TOC entry 3748 (class 0 OID 17305)
--- Dependencies: 288
+-- TOC entry 3873 (class 0 OID 17305)
+-- Dependencies: 302
 -- Data for Name: resep; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.resep (id, produk_jadi_id, bahan_baku_id, jumlah_dibutuhkan, user_id) FROM stdin;
-4e9c1e02-33d9-48f0-84a5-3f373a694910	935d6b56-2f9d-4e7d-91b8-1976f4856935	a0188910-24b7-4e1f-9a43-621fc9b05ff8	10	3798ff14-acf7-40bd-a6bd-819f8479b880
+af879e7f-27a8-4f3b-9280-b9a25b777b23	4cebe159-502c-4537-8531-209a80458931	23bb32d5-4fd0-49a2-aaaa-96e5a93910ac	1	3798ff14-acf7-40bd-a6bd-819f8479b880
+dad5fa66-7310-4295-97c9-65d8dc7e577c	4cebe159-502c-4537-8531-209a80458931	0bc7f68f-25f4-4392-96e6-ed13a90248f1	15	3798ff14-acf7-40bd-a6bd-819f8479b880
 \.
 
 
 --
--- TOC entry 3541 (class 2606 OID 17282)
+-- TOC entry 3880 (class 0 OID 18719)
+-- Dependencies: 310
+-- Data for Name: reservasi_stok_supplier; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.reservasi_stok_supplier (id, bahan_baku_id, supplier_id, jumlah_reservasi, catatan, user_id, created_at, updated_at, kemasan_id) FROM stdin;
+6150657b-adb4-4d74-8a31-b5fce2ea580d	0bc7f68f-25f4-4392-96e6-ed13a90248f1	bc219ee7-5945-468c-8dea-b68da385b53f	199		3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 14:28:03.316603+00	2025-08-12 14:28:44.101625+00	aea969ec-a4d6-4389-9ffb-716506ff0684
+\.
+
+
+--
+-- TOC entry 3876 (class 0 OID 18648)
+-- Dependencies: 306
+-- Data for Name: suppliers; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.suppliers (id, nama_supplier, kontak, alamat, user_id, created_at) FROM stdin;
+bc219ee7-5945-468c-8dea-b68da385b53f	PT NILAM WIDURI	0812312782878	NILAM WIDURI JAKARTA	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 11:15:58.16648+00
+\.
+
+
+--
+-- TOC entry 3878 (class 0 OID 18680)
+-- Dependencies: 308
+-- Data for Name: unit_dasar; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.unit_dasar (id, nama_unit, deskripsi, user_id, created_at) FROM stdin;
+820ffd81-7a02-4a36-ad73-486504f0fe5f	Pcs	Satuan Pices	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 10:17:56.85954+00
+bb0f9e26-83de-4ccf-9866-9f50820f61bc	ml	1000 Mili Liter = 1 Liter	3798ff14-acf7-40bd-a6bd-819f8479b880	2025-08-12 10:18:19.077091+00
+\.
+
+
+--
+-- TOC entry 3606 (class 2606 OID 17282)
 -- Name: bahan_baku bahan_baku_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -510,7 +894,43 @@ ALTER TABLE ONLY public.bahan_baku
 
 
 --
--- TOC entry 3551 (class 2606 OID 17339)
+-- TOC entry 3629 (class 2606 OID 18673)
+-- Name: kategori kategori_nama_kategori_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kategori
+    ADD CONSTRAINT kategori_nama_kategori_key UNIQUE (nama_kategori);
+
+
+--
+-- TOC entry 3631 (class 2606 OID 18671)
+-- Name: kategori kategori_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kategori
+    ADD CONSTRAINT kategori_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3640 (class 2606 OID 18707)
+-- Name: kemasan kemasan_nama_kemasan_user_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kemasan
+    ADD CONSTRAINT kemasan_nama_kemasan_user_id_key UNIQUE (nama_kemasan, user_id);
+
+
+--
+-- TOC entry 3642 (class 2606 OID 18705)
+-- Name: kemasan kemasan_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kemasan
+    ADD CONSTRAINT kemasan_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3621 (class 2606 OID 17339)
 -- Name: pembelian pembelian_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -519,7 +939,7 @@ ALTER TABLE ONLY public.pembelian
 
 
 --
--- TOC entry 3553 (class 2606 OID 17359)
+-- TOC entry 3623 (class 2606 OID 17359)
 -- Name: penjualan penjualan_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -528,7 +948,7 @@ ALTER TABLE ONLY public.penjualan
 
 
 --
--- TOC entry 3543 (class 2606 OID 17297)
+-- TOC entry 3610 (class 2606 OID 17297)
 -- Name: produk_jadi produk_jadi_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -537,7 +957,7 @@ ALTER TABLE ONLY public.produk_jadi
 
 
 --
--- TOC entry 3545 (class 2606 OID 17299)
+-- TOC entry 3612 (class 2606 OID 17299)
 -- Name: produk_jadi produk_jadi_sku_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -546,7 +966,7 @@ ALTER TABLE ONLY public.produk_jadi
 
 
 --
--- TOC entry 3547 (class 2606 OID 17312)
+-- TOC entry 3614 (class 2606 OID 17312)
 -- Name: resep resep_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -555,7 +975,7 @@ ALTER TABLE ONLY public.resep
 
 
 --
--- TOC entry 3549 (class 2606 OID 17314)
+-- TOC entry 3616 (class 2606 OID 17314)
 -- Name: resep resep_produk_jadi_id_bahan_baku_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -564,15 +984,187 @@ ALTER TABLE ONLY public.resep
 
 
 --
--- TOC entry 3563 (class 2620 OID 17370)
--- Name: pembelian trigger_update_stok_pembelian; Type: TRIGGER; Schema: public; Owner: postgres
+-- TOC entry 3650 (class 2606 OID 18728)
+-- Name: reservasi_stok_supplier reservasi_stok_supplier_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-CREATE TRIGGER trigger_update_stok_pembelian AFTER INSERT ON public.pembelian FOR EACH ROW EXECUTE FUNCTION public.update_stok_pembelian();
+ALTER TABLE ONLY public.reservasi_stok_supplier
+    ADD CONSTRAINT reservasi_stok_supplier_pkey PRIMARY KEY (id);
 
 
 --
--- TOC entry 3564 (class 2620 OID 17371)
+-- TOC entry 3626 (class 2606 OID 18656)
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3634 (class 2606 OID 18690)
+-- Name: unit_dasar unit_dasar_nama_unit_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unit_dasar
+    ADD CONSTRAINT unit_dasar_nama_unit_key UNIQUE (nama_unit);
+
+
+--
+-- TOC entry 3636 (class 2606 OID 18688)
+-- Name: unit_dasar unit_dasar_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unit_dasar
+    ADD CONSTRAINT unit_dasar_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 3607 (class 1259 OID 18790)
+-- Name: idx_bahan_baku_kategori_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_bahan_baku_kategori_id ON public.bahan_baku USING btree (kategori_id);
+
+
+--
+-- TOC entry 3608 (class 1259 OID 18791)
+-- Name: idx_bahan_baku_unit_dasar_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_bahan_baku_unit_dasar_id ON public.bahan_baku USING btree (unit_dasar_id);
+
+
+--
+-- TOC entry 3627 (class 1259 OID 18798)
+-- Name: idx_kategori_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_kategori_user_id ON public.kategori USING btree (user_id);
+
+
+--
+-- TOC entry 3637 (class 1259 OID 18796)
+-- Name: idx_kemasan_unit_dasar_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_kemasan_unit_dasar_id ON public.kemasan USING btree (unit_dasar_id);
+
+
+--
+-- TOC entry 3638 (class 1259 OID 18800)
+-- Name: idx_kemasan_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_kemasan_user_id ON public.kemasan USING btree (user_id);
+
+
+--
+-- TOC entry 3617 (class 1259 OID 18793)
+-- Name: idx_pembelian_kemasan_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pembelian_kemasan_id ON public.pembelian USING btree (kemasan_id);
+
+
+--
+-- TOC entry 3618 (class 1259 OID 20066)
+-- Name: idx_pembelian_reservasi; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pembelian_reservasi ON public.pembelian USING btree (supplier_id, bahan_baku_id, kemasan_id) WHERE (asal_barang = 'reservasi'::text);
+
+
+--
+-- TOC entry 3619 (class 1259 OID 18792)
+-- Name: idx_pembelian_supplier_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pembelian_supplier_id ON public.pembelian USING btree (supplier_id);
+
+
+--
+-- TOC entry 3643 (class 1259 OID 18794)
+-- Name: idx_reservasi_bahan_baku_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_bahan_baku_id ON public.reservasi_stok_supplier USING btree (bahan_baku_id);
+
+
+--
+-- TOC entry 3644 (class 1259 OID 19932)
+-- Name: idx_reservasi_stok_supplier_kemasan_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_stok_supplier_kemasan_id ON public.reservasi_stok_supplier USING btree (kemasan_id);
+
+
+--
+-- TOC entry 3645 (class 1259 OID 20029)
+-- Name: idx_reservasi_supplier_bahan_kemasan; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_supplier_bahan_kemasan ON public.reservasi_stok_supplier USING btree (supplier_id, bahan_baku_id, kemasan_id);
+
+
+--
+-- TOC entry 3646 (class 1259 OID 18795)
+-- Name: idx_reservasi_supplier_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_supplier_id ON public.reservasi_stok_supplier USING btree (supplier_id);
+
+
+--
+-- TOC entry 3647 (class 1259 OID 20030)
+-- Name: idx_reservasi_user_aktif; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_user_aktif ON public.reservasi_stok_supplier USING btree (user_id) WHERE (jumlah_reservasi > (0)::numeric);
+
+
+--
+-- TOC entry 3648 (class 1259 OID 18801)
+-- Name: idx_reservasi_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_reservasi_user_id ON public.reservasi_stok_supplier USING btree (user_id);
+
+
+--
+-- TOC entry 3624 (class 1259 OID 18797)
+-- Name: idx_suppliers_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_suppliers_user_id ON public.suppliers USING btree (user_id);
+
+
+--
+-- TOC entry 3632 (class 1259 OID 18799)
+-- Name: idx_unit_dasar_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_unit_dasar_user_id ON public.unit_dasar USING btree (user_id);
+
+
+--
+-- TOC entry 3673 (class 2620 OID 18773)
+-- Name: pembelian trigger_handle_pembelian; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trigger_handle_pembelian AFTER INSERT ON public.pembelian FOR EACH ROW EXECUTE FUNCTION public.handle_pembelian_stok();
+
+
+--
+-- TOC entry 3675 (class 2620 OID 18775)
+-- Name: reservasi_stok_supplier trigger_update_reservasi_timestamp; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trigger_update_reservasi_timestamp BEFORE UPDATE ON public.reservasi_stok_supplier FOR EACH ROW EXECUTE FUNCTION public.update_reservasi_timestamp();
+
+
+--
+-- TOC entry 3674 (class 2620 OID 17371)
 -- Name: penjualan trigger_update_stok_penjualan; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -580,7 +1172,25 @@ CREATE TRIGGER trigger_update_stok_penjualan AFTER INSERT ON public.penjualan FO
 
 
 --
--- TOC entry 3554 (class 2606 OID 17283)
+-- TOC entry 3651 (class 2606 OID 18750)
+-- Name: bahan_baku bahan_baku_kategori_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bahan_baku
+    ADD CONSTRAINT bahan_baku_kategori_id_fkey FOREIGN KEY (kategori_id) REFERENCES public.kategori(id);
+
+
+--
+-- TOC entry 3652 (class 2606 OID 18755)
+-- Name: bahan_baku bahan_baku_unit_dasar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bahan_baku
+    ADD CONSTRAINT bahan_baku_unit_dasar_id_fkey FOREIGN KEY (unit_dasar_id) REFERENCES public.unit_dasar(id);
+
+
+--
+-- TOC entry 3653 (class 2606 OID 17283)
 -- Name: bahan_baku bahan_baku_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -589,7 +1199,34 @@ ALTER TABLE ONLY public.bahan_baku
 
 
 --
--- TOC entry 3559 (class 2606 OID 17340)
+-- TOC entry 3665 (class 2606 OID 18674)
+-- Name: kategori kategori_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kategori
+    ADD CONSTRAINT kategori_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3667 (class 2606 OID 18708)
+-- Name: kemasan kemasan_unit_dasar_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kemasan
+    ADD CONSTRAINT kemasan_unit_dasar_id_fkey FOREIGN KEY (unit_dasar_id) REFERENCES public.unit_dasar(id);
+
+
+--
+-- TOC entry 3668 (class 2606 OID 18713)
+-- Name: kemasan kemasan_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kemasan
+    ADD CONSTRAINT kemasan_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3658 (class 2606 OID 17340)
 -- Name: pembelian pembelian_bahan_baku_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -598,7 +1235,25 @@ ALTER TABLE ONLY public.pembelian
 
 
 --
--- TOC entry 3560 (class 2606 OID 17345)
+-- TOC entry 3659 (class 2606 OID 18766)
+-- Name: pembelian pembelian_kemasan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pembelian
+    ADD CONSTRAINT pembelian_kemasan_id_fkey FOREIGN KEY (kemasan_id) REFERENCES public.kemasan(id);
+
+
+--
+-- TOC entry 3660 (class 2606 OID 18760)
+-- Name: pembelian pembelian_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pembelian
+    ADD CONSTRAINT pembelian_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- TOC entry 3661 (class 2606 OID 17345)
 -- Name: pembelian pembelian_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -607,7 +1262,7 @@ ALTER TABLE ONLY public.pembelian
 
 
 --
--- TOC entry 3561 (class 2606 OID 17360)
+-- TOC entry 3662 (class 2606 OID 17360)
 -- Name: penjualan penjualan_produk_jadi_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -616,7 +1271,7 @@ ALTER TABLE ONLY public.penjualan
 
 
 --
--- TOC entry 3562 (class 2606 OID 17365)
+-- TOC entry 3663 (class 2606 OID 17365)
 -- Name: penjualan penjualan_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -625,7 +1280,7 @@ ALTER TABLE ONLY public.penjualan
 
 
 --
--- TOC entry 3555 (class 2606 OID 17300)
+-- TOC entry 3654 (class 2606 OID 17300)
 -- Name: produk_jadi produk_jadi_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -634,7 +1289,7 @@ ALTER TABLE ONLY public.produk_jadi
 
 
 --
--- TOC entry 3556 (class 2606 OID 17320)
+-- TOC entry 3655 (class 2606 OID 17320)
 -- Name: resep resep_bahan_baku_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -643,7 +1298,7 @@ ALTER TABLE ONLY public.resep
 
 
 --
--- TOC entry 3557 (class 2606 OID 17315)
+-- TOC entry 3656 (class 2606 OID 17315)
 -- Name: resep resep_produk_jadi_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -652,7 +1307,7 @@ ALTER TABLE ONLY public.resep
 
 
 --
--- TOC entry 3558 (class 2606 OID 17325)
+-- TOC entry 3657 (class 2606 OID 17325)
 -- Name: resep resep_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -661,7 +1316,61 @@ ALTER TABLE ONLY public.resep
 
 
 --
--- TOC entry 3728 (class 3256 OID 17385)
+-- TOC entry 3669 (class 2606 OID 18729)
+-- Name: reservasi_stok_supplier reservasi_stok_supplier_bahan_baku_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.reservasi_stok_supplier
+    ADD CONSTRAINT reservasi_stok_supplier_bahan_baku_id_fkey FOREIGN KEY (bahan_baku_id) REFERENCES public.bahan_baku(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3670 (class 2606 OID 19927)
+-- Name: reservasi_stok_supplier reservasi_stok_supplier_kemasan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.reservasi_stok_supplier
+    ADD CONSTRAINT reservasi_stok_supplier_kemasan_id_fkey FOREIGN KEY (kemasan_id) REFERENCES public.kemasan(id);
+
+
+--
+-- TOC entry 3671 (class 2606 OID 18734)
+-- Name: reservasi_stok_supplier reservasi_stok_supplier_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.reservasi_stok_supplier
+    ADD CONSTRAINT reservasi_stok_supplier_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3672 (class 2606 OID 18739)
+-- Name: reservasi_stok_supplier reservasi_stok_supplier_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.reservasi_stok_supplier
+    ADD CONSTRAINT reservasi_stok_supplier_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3664 (class 2606 OID 18657)
+-- Name: suppliers suppliers_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3666 (class 2606 OID 18691)
+-- Name: unit_dasar unit_dasar_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unit_dasar
+    ADD CONSTRAINT unit_dasar_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 3848 (class 3256 OID 17385)
 -- Name: bahan_baku Users can delete own bahan_baku; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -669,7 +1378,7 @@ CREATE POLICY "Users can delete own bahan_baku" ON public.bahan_baku FOR DELETE 
 
 
 --
--- TOC entry 3740 (class 3256 OID 17397)
+-- TOC entry 3860 (class 3256 OID 17397)
 -- Name: pembelian Users can delete own pembelian; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -677,7 +1386,7 @@ CREATE POLICY "Users can delete own pembelian" ON public.pembelian FOR DELETE US
 
 
 --
--- TOC entry 3744 (class 3256 OID 17401)
+-- TOC entry 3864 (class 3256 OID 17401)
 -- Name: penjualan Users can delete own penjualan; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -685,7 +1394,7 @@ CREATE POLICY "Users can delete own penjualan" ON public.penjualan FOR DELETE US
 
 
 --
--- TOC entry 3732 (class 3256 OID 17389)
+-- TOC entry 3852 (class 3256 OID 17389)
 -- Name: produk_jadi Users can delete own produk_jadi; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -693,7 +1402,7 @@ CREATE POLICY "Users can delete own produk_jadi" ON public.produk_jadi FOR DELET
 
 
 --
--- TOC entry 3736 (class 3256 OID 17393)
+-- TOC entry 3856 (class 3256 OID 17393)
 -- Name: resep Users can delete own resep; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -701,7 +1410,7 @@ CREATE POLICY "Users can delete own resep" ON public.resep FOR DELETE USING ((au
 
 
 --
--- TOC entry 3726 (class 3256 OID 17383)
+-- TOC entry 3846 (class 3256 OID 17383)
 -- Name: bahan_baku Users can insert own bahan_baku; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -709,7 +1418,7 @@ CREATE POLICY "Users can insert own bahan_baku" ON public.bahan_baku FOR INSERT 
 
 
 --
--- TOC entry 3738 (class 3256 OID 17395)
+-- TOC entry 3858 (class 3256 OID 17395)
 -- Name: pembelian Users can insert own pembelian; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -717,7 +1426,7 @@ CREATE POLICY "Users can insert own pembelian" ON public.pembelian FOR INSERT WI
 
 
 --
--- TOC entry 3742 (class 3256 OID 17399)
+-- TOC entry 3862 (class 3256 OID 17399)
 -- Name: penjualan Users can insert own penjualan; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -725,7 +1434,7 @@ CREATE POLICY "Users can insert own penjualan" ON public.penjualan FOR INSERT WI
 
 
 --
--- TOC entry 3730 (class 3256 OID 17387)
+-- TOC entry 3850 (class 3256 OID 17387)
 -- Name: produk_jadi Users can insert own produk_jadi; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -733,7 +1442,7 @@ CREATE POLICY "Users can insert own produk_jadi" ON public.produk_jadi FOR INSER
 
 
 --
--- TOC entry 3734 (class 3256 OID 17391)
+-- TOC entry 3854 (class 3256 OID 17391)
 -- Name: resep Users can insert own resep; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -741,7 +1450,47 @@ CREATE POLICY "Users can insert own resep" ON public.resep FOR INSERT WITH CHECK
 
 
 --
--- TOC entry 3727 (class 3256 OID 17384)
+-- TOC entry 3866 (class 3256 OID 18679)
+-- Name: kategori Users can manage own kategori; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can manage own kategori" ON public.kategori USING ((auth.uid() = user_id));
+
+
+--
+-- TOC entry 3868 (class 3256 OID 18718)
+-- Name: kemasan Users can manage own kemasan; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can manage own kemasan" ON public.kemasan USING ((auth.uid() = user_id));
+
+
+--
+-- TOC entry 3869 (class 3256 OID 18744)
+-- Name: reservasi_stok_supplier Users can manage own reservations; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can manage own reservations" ON public.reservasi_stok_supplier USING ((auth.uid() = user_id));
+
+
+--
+-- TOC entry 3865 (class 3256 OID 18662)
+-- Name: suppliers Users can manage own suppliers; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can manage own suppliers" ON public.suppliers USING ((auth.uid() = user_id));
+
+
+--
+-- TOC entry 3867 (class 3256 OID 18696)
+-- Name: unit_dasar Users can manage own unit_dasar; Type: POLICY; Schema: public; Owner: postgres
+--
+
+CREATE POLICY "Users can manage own unit_dasar" ON public.unit_dasar USING ((auth.uid() = user_id));
+
+
+--
+-- TOC entry 3847 (class 3256 OID 17384)
 -- Name: bahan_baku Users can update own bahan_baku; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -749,7 +1498,7 @@ CREATE POLICY "Users can update own bahan_baku" ON public.bahan_baku FOR UPDATE 
 
 
 --
--- TOC entry 3739 (class 3256 OID 17396)
+-- TOC entry 3859 (class 3256 OID 17396)
 -- Name: pembelian Users can update own pembelian; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -757,7 +1506,7 @@ CREATE POLICY "Users can update own pembelian" ON public.pembelian FOR UPDATE US
 
 
 --
--- TOC entry 3743 (class 3256 OID 17400)
+-- TOC entry 3863 (class 3256 OID 17400)
 -- Name: penjualan Users can update own penjualan; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -765,7 +1514,7 @@ CREATE POLICY "Users can update own penjualan" ON public.penjualan FOR UPDATE US
 
 
 --
--- TOC entry 3731 (class 3256 OID 17388)
+-- TOC entry 3851 (class 3256 OID 17388)
 -- Name: produk_jadi Users can update own produk_jadi; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -773,7 +1522,7 @@ CREATE POLICY "Users can update own produk_jadi" ON public.produk_jadi FOR UPDAT
 
 
 --
--- TOC entry 3735 (class 3256 OID 17392)
+-- TOC entry 3855 (class 3256 OID 17392)
 -- Name: resep Users can update own resep; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -781,7 +1530,7 @@ CREATE POLICY "Users can update own resep" ON public.resep FOR UPDATE USING ((au
 
 
 --
--- TOC entry 3725 (class 3256 OID 17382)
+-- TOC entry 3845 (class 3256 OID 17382)
 -- Name: bahan_baku Users can view own bahan_baku; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -789,7 +1538,7 @@ CREATE POLICY "Users can view own bahan_baku" ON public.bahan_baku FOR SELECT US
 
 
 --
--- TOC entry 3737 (class 3256 OID 17394)
+-- TOC entry 3857 (class 3256 OID 17394)
 -- Name: pembelian Users can view own pembelian; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -797,7 +1546,7 @@ CREATE POLICY "Users can view own pembelian" ON public.pembelian FOR SELECT USIN
 
 
 --
--- TOC entry 3741 (class 3256 OID 17398)
+-- TOC entry 3861 (class 3256 OID 17398)
 -- Name: penjualan Users can view own penjualan; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -805,7 +1554,7 @@ CREATE POLICY "Users can view own penjualan" ON public.penjualan FOR SELECT USIN
 
 
 --
--- TOC entry 3729 (class 3256 OID 17386)
+-- TOC entry 3849 (class 3256 OID 17386)
 -- Name: produk_jadi Users can view own produk_jadi; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -813,7 +1562,7 @@ CREATE POLICY "Users can view own produk_jadi" ON public.produk_jadi FOR SELECT 
 
 
 --
--- TOC entry 3733 (class 3256 OID 17390)
+-- TOC entry 3853 (class 3256 OID 17390)
 -- Name: resep Users can view own resep; Type: POLICY; Schema: public; Owner: postgres
 --
 
@@ -821,47 +1570,87 @@ CREATE POLICY "Users can view own resep" ON public.resep FOR SELECT USING ((auth
 
 
 --
--- TOC entry 3720 (class 0 OID 17273)
--- Dependencies: 286
+-- TOC entry 3835 (class 0 OID 17273)
+-- Dependencies: 300
 -- Name: bahan_baku; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.bahan_baku ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 3723 (class 0 OID 17330)
--- Dependencies: 289
+-- TOC entry 3841 (class 0 OID 18663)
+-- Dependencies: 307
+-- Name: kategori; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.kategori ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3843 (class 0 OID 18697)
+-- Dependencies: 309
+-- Name: kemasan; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.kemasan ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3838 (class 0 OID 17330)
+-- Dependencies: 303
 -- Name: pembelian; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.pembelian ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 3724 (class 0 OID 17350)
--- Dependencies: 290
+-- TOC entry 3839 (class 0 OID 17350)
+-- Dependencies: 304
 -- Name: penjualan; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.penjualan ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 3721 (class 0 OID 17288)
--- Dependencies: 287
+-- TOC entry 3836 (class 0 OID 17288)
+-- Dependencies: 301
 -- Name: produk_jadi; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.produk_jadi ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 3722 (class 0 OID 17305)
--- Dependencies: 288
+-- TOC entry 3837 (class 0 OID 17305)
+-- Dependencies: 302
 -- Name: resep; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
 ALTER TABLE public.resep ENABLE ROW LEVEL SECURITY;
 
 --
--- TOC entry 3757 (class 0 OID 0)
+-- TOC entry 3844 (class 0 OID 18719)
+-- Dependencies: 310
+-- Name: reservasi_stok_supplier; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.reservasi_stok_supplier ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3840 (class 0 OID 18648)
+-- Dependencies: 306
+-- Name: suppliers; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3842 (class 0 OID 18680)
+-- Dependencies: 308
+-- Name: unit_dasar; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.unit_dasar ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3887 (class 0 OID 0)
 -- Dependencies: 13
 -- Name: SCHEMA public; Type: ACL; Schema: -; Owner: pg_database_owner
 --
@@ -873,8 +1662,8 @@ GRANT USAGE ON SCHEMA public TO service_role;
 
 
 --
--- TOC entry 3758 (class 0 OID 0)
--- Dependencies: 405
+-- TOC entry 3888 (class 0 OID 0)
+-- Dependencies: 427
 -- Name: FUNCTION check_stok_tersedia(produk_id uuid, jumlah_jual numeric); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -884,8 +1673,19 @@ GRANT ALL ON FUNCTION public.check_stok_tersedia(produk_id uuid, jumlah_jual num
 
 
 --
--- TOC entry 3759 (class 0 OID 0)
--- Dependencies: 406
+-- TOC entry 3890 (class 0 OID 0)
+-- Dependencies: 429
+-- Name: FUNCTION handle_pembelian_stok(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.handle_pembelian_stok() TO anon;
+GRANT ALL ON FUNCTION public.handle_pembelian_stok() TO authenticated;
+GRANT ALL ON FUNCTION public.handle_pembelian_stok() TO service_role;
+
+
+--
+-- TOC entry 3891 (class 0 OID 0)
+-- Dependencies: 428
 -- Name: FUNCTION hitung_max_produksi(produk_id uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -895,19 +1695,19 @@ GRANT ALL ON FUNCTION public.hitung_max_produksi(produk_id uuid) TO service_role
 
 
 --
--- TOC entry 3760 (class 0 OID 0)
--- Dependencies: 403
--- Name: FUNCTION update_stok_pembelian(); Type: ACL; Schema: public; Owner: postgres
+-- TOC entry 3892 (class 0 OID 0)
+-- Dependencies: 430
+-- Name: FUNCTION update_reservasi_timestamp(); Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON FUNCTION public.update_stok_pembelian() TO anon;
-GRANT ALL ON FUNCTION public.update_stok_pembelian() TO authenticated;
-GRANT ALL ON FUNCTION public.update_stok_pembelian() TO service_role;
+GRANT ALL ON FUNCTION public.update_reservasi_timestamp() TO anon;
+GRANT ALL ON FUNCTION public.update_reservasi_timestamp() TO authenticated;
+GRANT ALL ON FUNCTION public.update_reservasi_timestamp() TO service_role;
 
 
 --
--- TOC entry 3761 (class 0 OID 0)
--- Dependencies: 404
+-- TOC entry 3893 (class 0 OID 0)
+-- Dependencies: 426
 -- Name: FUNCTION update_stok_penjualan(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -917,8 +1717,19 @@ GRANT ALL ON FUNCTION public.update_stok_penjualan() TO service_role;
 
 
 --
--- TOC entry 3762 (class 0 OID 0)
--- Dependencies: 286
+-- TOC entry 3895 (class 0 OID 0)
+-- Dependencies: 431
+-- Name: FUNCTION validate_reservasi_consistency(); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.validate_reservasi_consistency() TO anon;
+GRANT ALL ON FUNCTION public.validate_reservasi_consistency() TO authenticated;
+GRANT ALL ON FUNCTION public.validate_reservasi_consistency() TO service_role;
+
+
+--
+-- TOC entry 3896 (class 0 OID 0)
+-- Dependencies: 300
 -- Name: TABLE bahan_baku; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -928,8 +1739,8 @@ GRANT ALL ON TABLE public.bahan_baku TO service_role;
 
 
 --
--- TOC entry 3763 (class 0 OID 0)
--- Dependencies: 290
+-- TOC entry 3897 (class 0 OID 0)
+-- Dependencies: 304
 -- Name: TABLE penjualan; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -939,8 +1750,8 @@ GRANT ALL ON TABLE public.penjualan TO service_role;
 
 
 --
--- TOC entry 3764 (class 0 OID 0)
--- Dependencies: 287
+-- TOC entry 3898 (class 0 OID 0)
+-- Dependencies: 301
 -- Name: TABLE produk_jadi; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -950,8 +1761,8 @@ GRANT ALL ON TABLE public.produk_jadi TO service_role;
 
 
 --
--- TOC entry 3765 (class 0 OID 0)
--- Dependencies: 288
+-- TOC entry 3899 (class 0 OID 0)
+-- Dependencies: 302
 -- Name: TABLE resep; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -961,8 +1772,19 @@ GRANT ALL ON TABLE public.resep TO service_role;
 
 
 --
--- TOC entry 3766 (class 0 OID 0)
--- Dependencies: 293
+-- TOC entry 3900 (class 0 OID 0)
+-- Dependencies: 308
+-- Name: TABLE unit_dasar; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.unit_dasar TO anon;
+GRANT ALL ON TABLE public.unit_dasar TO authenticated;
+GRANT ALL ON TABLE public.unit_dasar TO service_role;
+
+
+--
+-- TOC entry 3901 (class 0 OID 0)
+-- Dependencies: 314
 -- Name: TABLE bahan_baku_terlaris_detail; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -972,8 +1794,8 @@ GRANT ALL ON TABLE public.bahan_baku_terlaris_detail TO service_role;
 
 
 --
--- TOC entry 3767 (class 0 OID 0)
--- Dependencies: 295
+-- TOC entry 3902 (class 0 OID 0)
+-- Dependencies: 316
 -- Name: TABLE bahan_baku_terlaris_filter; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -983,8 +1805,8 @@ GRANT ALL ON TABLE public.bahan_baku_terlaris_filter TO service_role;
 
 
 --
--- TOC entry 3768 (class 0 OID 0)
--- Dependencies: 294
+-- TOC entry 3903 (class 0 OID 0)
+-- Dependencies: 315
 -- Name: TABLE bahan_baku_top20_chart; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -994,8 +1816,8 @@ GRANT ALL ON TABLE public.bahan_baku_top20_chart TO service_role;
 
 
 --
--- TOC entry 3769 (class 0 OID 0)
--- Dependencies: 296
+-- TOC entry 3904 (class 0 OID 0)
+-- Dependencies: 318
 -- Name: TABLE dashboard_bahan_baku_terlaris; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1005,8 +1827,30 @@ GRANT ALL ON TABLE public.dashboard_bahan_baku_terlaris TO service_role;
 
 
 --
--- TOC entry 3770 (class 0 OID 0)
--- Dependencies: 291
+-- TOC entry 3905 (class 0 OID 0)
+-- Dependencies: 307
+-- Name: TABLE kategori; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.kategori TO anon;
+GRANT ALL ON TABLE public.kategori TO authenticated;
+GRANT ALL ON TABLE public.kategori TO service_role;
+
+
+--
+-- TOC entry 3906 (class 0 OID 0)
+-- Dependencies: 309
+-- Name: TABLE kemasan; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.kemasan TO anon;
+GRANT ALL ON TABLE public.kemasan TO authenticated;
+GRANT ALL ON TABLE public.kemasan TO service_role;
+
+
+--
+-- TOC entry 3907 (class 0 OID 0)
+-- Dependencies: 313
 -- Name: TABLE laporan_pemakaian_bahan_baku; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1016,8 +1860,8 @@ GRANT ALL ON TABLE public.laporan_pemakaian_bahan_baku TO service_role;
 
 
 --
--- TOC entry 3771 (class 0 OID 0)
--- Dependencies: 292
+-- TOC entry 3908 (class 0 OID 0)
+-- Dependencies: 305
 -- Name: TABLE laporan_penjualan; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1027,8 +1871,8 @@ GRANT ALL ON TABLE public.laporan_penjualan TO service_role;
 
 
 --
--- TOC entry 3772 (class 0 OID 0)
--- Dependencies: 289
+-- TOC entry 3909 (class 0 OID 0)
+-- Dependencies: 303
 -- Name: TABLE pembelian; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1038,8 +1882,30 @@ GRANT ALL ON TABLE public.pembelian TO service_role;
 
 
 --
--- TOC entry 3773 (class 0 OID 0)
--- Dependencies: 297
+-- TOC entry 3911 (class 0 OID 0)
+-- Dependencies: 310
+-- Name: TABLE reservasi_stok_supplier; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.reservasi_stok_supplier TO anon;
+GRANT ALL ON TABLE public.reservasi_stok_supplier TO authenticated;
+GRANT ALL ON TABLE public.reservasi_stok_supplier TO service_role;
+
+
+--
+-- TOC entry 3912 (class 0 OID 0)
+-- Dependencies: 306
+-- Name: TABLE suppliers; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.suppliers TO anon;
+GRANT ALL ON TABLE public.suppliers TO authenticated;
+GRANT ALL ON TABLE public.suppliers TO service_role;
+
+
+--
+-- TOC entry 3913 (class 0 OID 0)
+-- Dependencies: 317
 -- Name: TABLE trend_pemakaian_bahan_baku; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -1049,7 +1915,51 @@ GRANT ALL ON TABLE public.trend_pemakaian_bahan_baku TO service_role;
 
 
 --
--- TOC entry 2332 (class 826 OID 16488)
+-- TOC entry 3915 (class 0 OID 0)
+-- Dependencies: 319
+-- Name: TABLE v_reservasi_stok_monitoring; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.v_reservasi_stok_monitoring TO anon;
+GRANT ALL ON TABLE public.v_reservasi_stok_monitoring TO authenticated;
+GRANT ALL ON TABLE public.v_reservasi_stok_monitoring TO service_role;
+
+
+--
+-- TOC entry 3916 (class 0 OID 0)
+-- Dependencies: 312
+-- Name: TABLE view_bahan_baku_detail; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.view_bahan_baku_detail TO anon;
+GRANT ALL ON TABLE public.view_bahan_baku_detail TO authenticated;
+GRANT ALL ON TABLE public.view_bahan_baku_detail TO service_role;
+
+
+--
+-- TOC entry 3917 (class 0 OID 0)
+-- Dependencies: 320
+-- Name: TABLE view_pembelian_detail; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.view_pembelian_detail TO anon;
+GRANT ALL ON TABLE public.view_pembelian_detail TO authenticated;
+GRANT ALL ON TABLE public.view_pembelian_detail TO service_role;
+
+
+--
+-- TOC entry 3918 (class 0 OID 0)
+-- Dependencies: 311
+-- Name: TABLE view_reservasi_stok_detail; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.view_reservasi_stok_detail TO anon;
+GRANT ALL ON TABLE public.view_reservasi_stok_detail TO authenticated;
+GRANT ALL ON TABLE public.view_reservasi_stok_detail TO service_role;
+
+
+--
+-- TOC entry 2384 (class 826 OID 16488)
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
 --
 
@@ -1060,7 +1970,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENC
 
 
 --
--- TOC entry 2333 (class 826 OID 16489)
+-- TOC entry 2385 (class 826 OID 16489)
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
 --
 
@@ -1071,7 +1981,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON S
 
 
 --
--- TOC entry 2331 (class 826 OID 16487)
+-- TOC entry 2383 (class 826 OID 16487)
 -- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: postgres
 --
 
@@ -1082,7 +1992,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIO
 
 
 --
--- TOC entry 2335 (class 826 OID 16491)
+-- TOC entry 2387 (class 826 OID 16491)
 -- Name: DEFAULT PRIVILEGES FOR FUNCTIONS; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
 --
 
@@ -1093,7 +2003,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON F
 
 
 --
--- TOC entry 2330 (class 826 OID 16486)
+-- TOC entry 2382 (class 826 OID 16486)
 -- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: postgres
 --
 
@@ -1104,7 +2014,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 
 
 --
--- TOC entry 2334 (class 826 OID 16490)
+-- TOC entry 2386 (class 826 OID 16490)
 -- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: supabase_admin
 --
 
@@ -1114,7 +2024,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 
 
--- Completed on 2025-08-11 07:36:53
+-- Completed on 2025-08-13 00:15:51
 
 --
 -- PostgreSQL database dump complete

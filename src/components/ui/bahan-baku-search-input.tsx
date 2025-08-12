@@ -7,7 +7,9 @@ import { Search, Check } from 'lucide-react';
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  unit: string;
+  unit_dasar?: {
+    nama_unit: string;
+  };
 }
 
 interface BahanBakuSearchInputProps {
@@ -165,7 +167,7 @@ export function BahanBakuSearchInput({
                     {bahan.nama_bahan_baku}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Satuan: {bahan.unit}
+                    Satuan: {bahan.unit_dasar?.nama_unit || '-'}
                   </p>
                 </div>
                 {value === bahan.id && (

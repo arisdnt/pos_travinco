@@ -15,9 +15,10 @@ interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
   stok: number;
-  unit: string;
+  nama_unit: string;
+  nama_kategori: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 
@@ -40,7 +41,7 @@ export default function DetailBahanBakuPage() {
   const fetchBahanBaku = async () => {
     try {
       const { data, error } = await supabase
-        .from('bahan_baku')
+        .from('view_bahan_baku_detail')
         .select('*')
         .eq('id', id)
         .single();
@@ -171,10 +172,19 @@ export default function DetailBahanBakuPage() {
               
               <div>
                 <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Kategori
+                </label>
+                <p className="text-gray-900 dark:text-white mt-1 text-lg">
+                  {bahanBaku.nama_kategori || 'Tanpa Kategori'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Unit/Satuan
                 </label>
                 <p className="text-gray-900 dark:text-white font-mono mt-1 text-lg">
-                  {bahanBaku.unit}
+                  {bahanBaku.nama_unit || 'Unit tidak tersedia'}
                 </p>
               </div>
             </CardContent>
@@ -198,7 +208,7 @@ export default function DetailBahanBakuPage() {
                     {bahanBaku.stok}
                   </p>
                   <div className="flex flex-col">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{bahanBaku.unit}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{bahanBaku.nama_unit || 'unit'}</span>
                     <Badge 
                       variant={bahanBaku.stok > 0 ? "default" : "destructive"}
                       className="w-fit"
@@ -231,14 +241,16 @@ export default function DetailBahanBakuPage() {
                 </p>
               </div>
               
-              <div>
-                <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Terakhir Diperbarui
-                </label>
-                <p className="text-gray-900 dark:text-white mt-1 font-medium">
-                  {formatDateTime(bahanBaku.updated_at)}
-                </p>
-              </div>
+              {bahanBaku.updated_at && (
+                <div>
+                  <label className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Terakhir Diperbarui
+                  </label>
+                  <p className="text-gray-900 dark:text-white mt-1 font-medium">
+                    {formatDateTime(bahanBaku.updated_at)}
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

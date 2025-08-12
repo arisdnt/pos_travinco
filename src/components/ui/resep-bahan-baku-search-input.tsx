@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils';
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  unit: string;
+  unit_dasar?: {
+    nama_unit: string;
+  };
 }
 
 interface ResepBahanBakuSearchInputProps {
@@ -190,7 +192,7 @@ export function ResepBahanBakuSearchInput({
                   <div className="flex items-center justify-between">
                     <span>{bahanBaku.nama_bahan_baku}</span>
                     <span className="text-xs text-muted-foreground ml-2">
-                      {bahanBaku.unit}
+                      {bahanBaku.unit_dasar?.nama_unit || '-'}
                     </span>
                   </div>
                 </li>

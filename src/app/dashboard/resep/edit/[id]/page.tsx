@@ -16,8 +16,10 @@ import { toast } from 'sonner';
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  unit: string;
   stok: number;
+  unit_dasar?: {
+    nama_unit: string;
+  };
 }
 
 interface ProdukJadi {
@@ -45,8 +47,10 @@ interface Resep {
   };
   bahan_baku: {
     nama_bahan_baku: string;
-    unit: string;
     stok: number;
+    unit_dasar?: {
+      nama_unit: string;
+    };
   };
 }
 
@@ -88,15 +92,20 @@ export default function EditResepPage() {
             ),
             bahan_baku (
               nama_bahan_baku,
-              unit,
-              stok
+              stok,
+              unit_dasar:unit_dasar_id(nama_unit)
             )
           `)
           .eq('produk_jadi_id', produkJadiId)
           .eq('user_id', user.id),
         supabase
           .from('bahan_baku')
-          .select('id, nama_bahan_baku, unit, stok')
+          .select(`
+            id, 
+            nama_bahan_baku, 
+            stok,
+            unit_dasar:unit_dasar_id(nama_unit)
+          `)
           .eq('user_id', user.id)
           .order('nama_bahan_baku'),
         supabase
@@ -111,7 +120,13 @@ export default function EditResepPage() {
       if (produkJadiResponse.error) throw produkJadiResponse.error;
 
       const resepData = resepResponse.data as Resep[];
-      setBahanBakuList(bahanBakuResponse.data || []);
+      // Process bahan baku data to handle unit_dasar array
+      const processedBahanBaku = (bahanBakuResponse.data || []).map(item => ({
+        ...item,
+        unit_dasar: Array.isArray(item.unit_dasar) ? item.unit_dasar[0] : item.unit_dasar
+      }));
+      
+      setBahanBakuList(processedBahanBaku);
       setProdukJadiList(produkJadiResponse.data || []);
       
       if (resepData.length > 0) {
@@ -393,7 +408,7 @@ export default function EditResepPage() {
                           />
                           {selectedBahan && (
                             <span className="text-sm text-gray-500 dark:text-gray-400">
-                              {selectedBahan.unit}
+                              {selectedBahan.unit_dasar?.nama_unit || '-'}
                             </span>
                           )}
                         </div>

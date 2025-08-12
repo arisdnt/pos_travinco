@@ -116,7 +116,7 @@ export default function EditProdukJadiPage() {
 
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar 
           title="Edit Produk Jadi" 
           showBackButton={true}
@@ -132,7 +132,7 @@ export default function EditProdukJadiPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar 
         title="Edit Produk Jadi" 
         showBackButton={true}

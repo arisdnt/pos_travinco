@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,11 +15,49 @@ import { toast } from 'sonner';
 export default function AddBahanBakuPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [kategoris, setKategoris] = useState<any[]>([]);
+  const [unitDasars, setUnitDasars] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     nama_bahan_baku: '',
     stok: 0,
-    unit: ''
+    kategori_id: '',
+    unit_dasar_id: ''
   });
+
+  useEffect(() => {
+    fetchKategoris();
+    fetchUnitDasars();
+  }, []);
+
+  const fetchKategoris = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kategori')
+        .select('*')
+        .order('nama_kategori');
+      
+      if (error) throw error;
+      setKategoris(data || []);
+    } catch (error) {
+      console.error('Error fetching kategoris:', error);
+      toast.error('Gagal memuat data kategori');
+    }
+  };
+
+  const fetchUnitDasars = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('unit_dasar')
+        .select('*')
+        .order('nama_unit');
+      
+      if (error) throw error;
+      setUnitDasars(data || []);
+    } catch (error) {
+      console.error('Error fetching unit dasars:', error);
+      toast.error('Gagal memuat data unit dasar');
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -47,12 +85,19 @@ export default function AddBahanBakuPage() {
         return;
       }
 
+      // Validasi unit_dasar_id required
+      if (!formData.unit_dasar_id) {
+        toast.error('Unit dasar harus dipilih');
+        return;
+      }
+
       const { error } = await supabase
         .from('bahan_baku')
         .insert({
           nama_bahan_baku: formData.nama_bahan_baku,
           stok: formData.stok,
-          unit: formData.unit,
+          kategori_id: formData.kategori_id || null,
+          unit_dasar_id: formData.unit_dasar_id,
           user_id: user.id
         });
 
@@ -100,7 +145,7 @@ export default function AddBahanBakuPage() {
           </CardHeader>
           <CardContent>
             <form id="bahan-baku-form" onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="nama_bahan_baku" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     Nama Bahan Baku *
@@ -134,27 +179,47 @@ export default function AddBahanBakuPage() {
                   />
                 </div>
 
+
+
                 <div className="space-y-2">
-                  <Label htmlFor="unit" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Unit/Satuan *
+                  <Label htmlFor="kategori_id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Kategori
                   </Label>
                   <Select
-                    value={formData.unit}
-                    onValueChange={(value) => handleSelectChange('unit', value)}
+                    value={formData.kategori_id}
+                    onValueChange={(value) => handleSelectChange('kategori_id', value)}
+                  >
+                    <SelectTrigger className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <SelectValue placeholder="Pilih kategori (opsional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {kategoris.map((kategori) => (
+                        <SelectItem key={kategori.id} value={kategori.id}>
+                          {kategori.nama_kategori}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="unit_dasar_id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Unit Dasar *
+                  </Label>
+                  <Select
+                    value={formData.unit_dasar_id}
+                    onValueChange={(value) => handleSelectChange('unit_dasar_id', value)}
                     required
                   >
                     <SelectTrigger className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      <SelectValue placeholder="Pilih unit/satuan" />
+                      <SelectValue placeholder="Pilih unit dasar" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ml">ml (mililiter)</SelectItem>
-                      <SelectItem value="gram">gram</SelectItem>
-                      <SelectItem value="kg">kg (kilogram)</SelectItem>
-                      <SelectItem value="liter">liter</SelectItem>
-                      <SelectItem value="pcs">pcs (pieces)</SelectItem>
-                      <SelectItem value="bottle">bottle</SelectItem>
-                      <SelectItem value="oz">oz (ounce)</SelectItem>
-                      <SelectItem value="lb">lb (pound)</SelectItem>
+                      {unitDasars.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          {unit.nama_unit}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

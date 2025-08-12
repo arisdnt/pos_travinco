@@ -15,7 +15,8 @@ import { useToast } from "@/components/ui/use-toast"
 const bahanBakuSchema = z.object({
   nama_bahan_baku: z.string().min(1, "Nama bahan baku harus diisi"),
   stok: z.number().min(0, "Stok tidak boleh negatif"),
-  unit: z.string().min(1, "Unit harus diisi"),
+  kategori_id: z.string().optional(),
+  unit_dasar_id: z.string().min(1, "Unit dasar harus diisi"),
 })
 
 type BahanBakuFormData = z.infer<typeof bahanBakuSchema>
@@ -39,7 +40,8 @@ export function BahanBakuForm({ item, onClose, onSuccess }: BahanBakuFormProps) 
     defaultValues: {
       nama_bahan_baku: item?.nama_bahan_baku || "",
       stok: item?.stok || 0,
-      unit: item?.unit || "",
+      kategori_id: item?.kategori_id || "",
+      unit_dasar_id: item?.unit_dasar_id || "",
     },
   })
 
@@ -109,14 +111,14 @@ export function BahanBakuForm({ item, onClose, onSuccess }: BahanBakuFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="unit">Unit</Label>
+            <Label htmlFor="unit_dasar_id">Unit Dasar ID</Label>
             <Input
-              id="unit"
-              {...register("unit")}
-              placeholder="Masukkan unit (kg, liter, pcs, dll)"
+              id="unit_dasar_id"
+              {...register("unit_dasar_id")}
+              placeholder="Masukkan ID unit dasar"
             />
-            {errors.unit && (
-              <p className="text-sm text-red-500">{errors.unit.message}</p>
+            {errors.unit_dasar_id && (
+              <p className="text-sm text-red-500">{errors.unit_dasar_id.message}</p>
             )}
           </div>
 

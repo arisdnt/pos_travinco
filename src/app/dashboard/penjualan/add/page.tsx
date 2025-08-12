@@ -141,7 +141,7 @@ function AddPenjualanPage() {
         return;
       }
 
-      // Check stok for all items
+      // Check stok for all items before processing
       for (const item of validItems) {
         const { data: stokCheck, error: stokError } = await supabase
           .rpc('check_stok_tersedia', {
@@ -151,34 +151,99 @@ function AddPenjualanPage() {
 
         if (stokError) {
           console.error('Error checking stock:', stokError);
-          toast.error('Gagal memeriksa stok');
+          toast.error('Gagal memeriksa stok bahan baku');
           return;
         }
 
         if (!stokCheck) {
           const produk = produkJadiList.find(p => p.id === item.produk_jadi_id);
-          toast.error(`Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi}`);
+          
+          // Get detailed stock information for better error message
+          const { data: detailStok, error: detailError } = await supabase
+            .from('resep')
+            .select(`
+              jumlah_dibutuhkan,
+              bahan_baku (
+                nama_bahan_baku,
+                stok,
+                unit_dasar (
+                  nama_unit
+                )
+              )
+            `)
+            .eq('produk_jadi_id', item.produk_jadi_id);
+
+          if (!detailError && detailStok) {
+            const bahanKurang = [];
+            for (const resep of detailStok) {
+              const stokDibutuhkan = resep.jumlah_dibutuhkan * item.jumlah;
+              const bahanBaku = Array.isArray(resep.bahan_baku) ? resep.bahan_baku[0] : resep.bahan_baku;
+              const unitDasar = Array.isArray(bahanBaku?.unit_dasar) ? bahanBaku.unit_dasar[0] : bahanBaku?.unit_dasar;
+              const stokTersedia = bahanBaku?.stok || 0;
+              
+              if (stokTersedia < stokDibutuhkan) {
+                bahanKurang.push({
+                  nama: bahanBaku?.nama_bahan_baku || 'Unknown',
+                  dibutuhkan: stokDibutuhkan,
+                  tersedia: stokTersedia,
+                  unit: unitDasar?.nama_unit || 'unit',
+                  kurang: stokDibutuhkan - stokTersedia
+                });
+              }
+            }
+
+            if (bahanKurang.length > 0) {
+              const detailMessage = bahanKurang.map(bahan => 
+                `• ${bahan.nama}: butuh ${bahan.dibutuhkan} ${bahan.unit}, tersedia ${bahan.tersedia} ${bahan.unit} (kurang ${bahan.kurang} ${bahan.unit})`
+              ).join('\n');
+              
+              toast.error(
+                `❌ Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi} (${item.jumlah} unit):\n\n${detailMessage}\n\n💡 Silakan periksa dan tambah stok bahan baku yang diperlukan.`,
+                {
+                  duration: 8000,
+                  style: {
+                    whiteSpace: 'pre-line',
+                    maxWidth: '500px'
+                  }
+                }
+              );
+            } else {
+              toast.error(`Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi}`);
+            }
+          } else {
+            console.error('Error fetching detail stock:', detailError);
+            toast.error(`Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi}`);
+          }
+          
           return;
         }
       }
 
-      // Calculate total harga for each item
-      const penjualanData = validItems.map(item => ({
-        produk_jadi_id: item.produk_jadi_id,
-        jumlah: item.jumlah,
-        total_harga: item.total_harga,
-        tanggal: new Date(formData.tanggal).toISOString(),
-        catatan: formData.catatan || null,
-        user_id: user.id
-      }));
+      // Insert each item as separate penjualan record
+      // Database trigger will automatically:
+      // 1. Calculate total_harga based on produk harga_jual
+      // 2. Reduce bahan_baku stock based on resep
+      const penjualanPromises = validItems.map(async (item) => {
+        const { data, error } = await supabase
+          .from('penjualan')
+          .insert({
+            produk_jadi_id: item.produk_jadi_id,
+            jumlah: item.jumlah,
+            tanggal: new Date(formData.tanggal).toISOString(),
+            catatan: formData.catatan || null,
+            user_id: user.id
+            // total_harga will be calculated by database trigger
+          })
+          .select()
+          .single();
 
-      const { error } = await supabase
-        .from('penjualan')
-        .insert(penjualanData);
+        if (error) throw error;
+        return data;
+      });
 
-      if (error) throw error;
-
-      toast.success(`${validItems.length} item penjualan berhasil ditambahkan!`);
+      const results = await Promise.all(penjualanPromises);
+      
+      toast.success(`${validItems.length} item penjualan berhasil ditambahkan! Stok bahan baku telah dikurangi otomatis.`);
       router.push('/dashboard/penjualan');
     } catch (error: any) {
       console.error('Error adding penjualan:', error);
@@ -207,7 +272,7 @@ function AddPenjualanPage() {
   const validItemsCount = items.filter(item => item.produk_jadi_id && item.jumlah > 0).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar 
         title="Tambah Penjualan" 
         showBackButton={true}

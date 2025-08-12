@@ -21,7 +21,8 @@ export type Database = {
           id: string
           nama_bahan_baku: string
           stok: number
-          unit: string
+          kategori_id?: string
+          unit_dasar_id?: string
           user_id: string
           created_at: string
         }
@@ -29,7 +30,8 @@ export type Database = {
           id?: string
           nama_bahan_baku: string
           stok?: number
-          unit: string
+          kategori_id?: string
+          unit_dasar_id?: string
           user_id: string
           created_at?: string
         }
@@ -37,7 +39,8 @@ export type Database = {
           id?: string
           nama_bahan_baku?: string
           stok?: number
-          unit?: string
+          kategori_id?: string
+          unit_dasar_id?: string
           user_id?: string
           created_at?: string
         }
@@ -169,7 +172,7 @@ export type Database = {
       laporan_pemakaian_bahan_baku: {
         Row: {
           nama_bahan_baku: string
-          unit: string
+          nama_unit: string
           total_terpakai: number
           periode: string
           user_id: string
@@ -197,7 +200,7 @@ export const getCurrentUser = async () => {
 
 export const getBahanBaku = async () => {
   const { data, error } = await supabase
-    .from('bahan_baku')
+    .from('view_bahan_baku_detail')
     .select('*')
     .order('created_at', { ascending: false })
   

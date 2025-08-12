@@ -16,7 +16,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 interface TrendBahanBaku {
   bahan_baku_id: string;
   nama_bahan_baku: string;
-  unit: string;
+  nama_unit: string;
   periode: string;
   bulan: number;
   tahun: number;
@@ -149,7 +149,7 @@ export default function NilamPage() {
       : item.nama_bahan_baku,
     nama_lengkap: item.nama_bahan_baku,
     total_terpakai: item.total_terpakai,
-    unit: item.unit,
+    unit: item.nama_unit,
     kategori: item.kategori
   }));
 
@@ -233,7 +233,7 @@ export default function NilamPage() {
         
         doc.text(nama, 20, yPosition);
         doc.text(item.kategori, 80, yPosition);
-        doc.text(`${item.total_terpakai.toLocaleString()} ${item.unit}`, 120, yPosition);
+        doc.text(`${item.total_terpakai.toLocaleString()} ${item.nama_unit}`, 120, yPosition);
         doc.text(`${item.jumlah_transaksi}x`, 160, yPosition);
         doc.text(`${item.trend_persentase.toFixed(1)}%`, 180, yPosition);
         
@@ -494,7 +494,7 @@ export default function NilamPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <span className="font-mono">
-                                {item.total_terpakai.toLocaleString()} {item.unit}
+                                {item.total_terpakai.toLocaleString()} {item.nama_unit}
                               </span>
                             </TableCell>
                             <TableCell className="text-right">

@@ -50,7 +50,7 @@ export default function PenjualanPage() {
           total_harga,
           tanggal,
           catatan,
-          produk_jadi:produk_jadi_id(
+          produk_jadi(
             nama_produk_jadi,
             harga_jual
           )

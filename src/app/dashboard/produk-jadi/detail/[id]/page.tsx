@@ -110,7 +110,7 @@ export default function DetailProdukJadiPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar 
           title="Detail Produk Jadi" 
           showBackButton={true}
@@ -127,7 +127,7 @@ export default function DetailProdukJadiPage() {
 
   if (!produkJadi) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar 
           title="Detail Produk Jadi" 
           showBackButton={true}
@@ -151,7 +151,7 @@ export default function DetailProdukJadiPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar 
         title={`Detail - ${produkJadi.nama_produk_jadi}`} 
         showBackButton={true}

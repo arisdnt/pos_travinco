@@ -27,11 +27,11 @@ interface PembelianFormProps {
 
 // Mock data untuk dropdown bahan baku
 const mockBahanBaku = [
-  { id: '1', nama_bahan_baku: 'Alkohol 96%', unit: 'ml' },
-  { id: '2', nama_bahan_baku: 'Essential Oil Lavender', unit: 'ml' },
-  { id: '3', nama_bahan_baku: 'Essential Oil Rose', unit: 'ml' },
-  { id: '4', nama_bahan_baku: 'Botol Spray 50ml', unit: 'buah' },
-  { id: '5', nama_bahan_baku: 'Botol Spray 30ml', unit: 'buah' },
+  { id: '1', nama_bahan_baku: 'Alkohol 96%', unit_dasar: { nama_unit: 'ml' } },
+  { id: '2', nama_bahan_baku: 'Essential Oil Lavender', unit_dasar: { nama_unit: 'ml' } },
+  { id: '3', nama_bahan_baku: 'Essential Oil Rose', unit_dasar: { nama_unit: 'ml' } },
+  { id: '4', nama_bahan_baku: 'Botol Spray 50ml', unit_dasar: { nama_unit: 'buah' } },
+  { id: '5', nama_bahan_baku: 'Botol Spray 30ml', unit_dasar: { nama_unit: 'buah' } },
 ];
 
 export default function PembelianForm({ pembelian, onClose }: PembelianFormProps) {
@@ -100,7 +100,7 @@ export default function PembelianForm({ pembelian, onClose }: PembelianFormProps
                 <option value="">Pilih Bahan Baku</option>
                 {mockBahanBaku.map((bahan) => (
                   <option key={bahan.id} value={bahan.id}>
-                    {bahan.nama_bahan_baku} ({bahan.unit})
+                    {bahan.nama_bahan_baku} ({bahan.unit_dasar.nama_unit})
                   </option>
                 ))}
               </select>
@@ -111,7 +111,7 @@ export default function PembelianForm({ pembelian, onClose }: PembelianFormProps
 
             <div className="space-y-2">
               <Label htmlFor="jumlah">
-                Jumlah {selectedBahan && `(${selectedBahan.unit})`}
+                Jumlah {selectedBahan && `(${selectedBahan.unit_dasar.nama_unit})`}
               </Label>
               <Input
                 id="jumlah"

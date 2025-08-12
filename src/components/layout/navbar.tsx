@@ -42,7 +42,7 @@ export function Navbar({
 
   return (
     <div className={cn(
-      "sticky top-0 z-40 bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800",
+      "sticky top-0 z-40 bg-white dark:bg-gray-900",
       className
     )}>
       <div className="px-4 sm:px-6 lg:px-8">

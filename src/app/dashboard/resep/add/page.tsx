@@ -16,7 +16,9 @@ import { Navbar } from '@/components/layout/navbar';
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  unit: string;
+  unit_dasar?: {
+    nama_unit: string;
+  };
 }
 
 interface ProdukJadi {
@@ -52,11 +54,22 @@ export default function AddResepPage() {
     try {
       const { data, error } = await supabase
         .from('bahan_baku')
-        .select('id, nama_bahan_baku, unit')
+        .select(`
+          id, 
+          nama_bahan_baku, 
+          unit_dasar:unit_dasar_id(nama_unit)
+        `)
         .order('nama_bahan_baku');
 
       if (error) throw error;
-      setBahanBakuList(data || []);
+      
+      // Process bahan baku data to handle unit_dasar array
+      const processedBahanBaku = (data || []).map(item => ({
+        ...item,
+        unit_dasar: Array.isArray(item.unit_dasar) ? item.unit_dasar[0] : item.unit_dasar
+      }));
+      
+      setBahanBakuList(processedBahanBaku);
     } catch (error: any) {
       console.error('Error fetching bahan baku:', error);
       toast.error('Gagal memuat data bahan baku');
@@ -307,7 +320,7 @@ export default function AddResepPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar 
         title={isEditMode ? "Edit Resep" : "Tambah Resep"} 
         showBackButton={true}
@@ -397,7 +410,7 @@ export default function AddResepPage() {
                             />
                             {selectedBahan && (
                               <span className="text-sm text-gray-500 dark:text-gray-400">
-                                {selectedBahan.unit}
+                                {selectedBahan.unit_dasar?.nama_unit || '-'}
                               </span>
                             )}
                           </div>

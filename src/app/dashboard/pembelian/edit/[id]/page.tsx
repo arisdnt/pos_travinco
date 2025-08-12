@@ -15,19 +15,48 @@ import { Navbar } from '@/components/layout/navbar';
 interface BahanBaku {
   id: string;
   nama_bahan_baku: string;
-  unit: string;
+  unit_dasar?: {
+    nama_unit: string;
+  };
+}
+
+interface Supplier {
+  id: string;
+  nama_supplier: string;
+  kontak?: string;
+}
+
+interface Kemasan {
+  id: string;
+  nama_kemasan: string;
+  nilai_konversi: number;
+  unit_dasar?: {
+    nama_unit: string;
+  };
 }
 
 interface Pembelian {
   id: string;
   bahan_baku_id: string;
+  supplier_id?: string;
+  kemasan_id?: string;
   jumlah: number;
   harga_beli: number;
   tanggal: string;
   catatan: string;
+  asal_barang: 'langsung' | 'reservasi';
   bahan_baku: {
     nama_bahan_baku: string;
-    unit: string;
+    unit_dasar?: {
+      nama_unit: string;
+    };
+  };
+  suppliers?: {
+    nama_supplier: string;
+  };
+  kemasan?: {
+    nama_kemasan: string;
+    nilai_konversi: number;
   };
 }
 
@@ -38,12 +67,18 @@ export default function EditPembelianPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [bahanBakuList, setBahanBakuList] = useState<BahanBaku[]>([]);
+  const [supplierList, setSupplierList] = useState<Supplier[]>([]);
+  const [kemasanList, setKemasanList] = useState<Kemasan[]>([]);
+  const [selectedBahan, setSelectedBahan] = useState<BahanBaku | null>(null);
   const [formData, setFormData] = useState({
     bahan_baku_id: '',
+    supplier_id: '',
+    kemasan_id: '',
     jumlah: 0,
     harga_beli: 0,
     tanggal: new Date().toISOString().split('T')[0],
-    catatan: ''
+    catatan: '',
+    asal_barang: 'langsung' as 'langsung' | 'reservasi'
   });
 
   useEffect(() => {
@@ -55,44 +90,114 @@ export default function EditPembelianPage() {
   const fetchData = async () => {
     try {
       const user = await getCurrentUser();
-      if (!user) return;
+      if (!user) {
+        toast.error('Anda harus login terlebih dahulu');
+        router.push('/auth/login');
+        return;
+      }
 
-      const [pembelianResponse, bahanBakuResponse] = await Promise.all([
-        supabase
-          .from('pembelian')
-          .select(`
-            *,
-            bahan_baku (
-              nama_bahan_baku,
-              unit
-            )
-          `)
-          .eq('id', id)
-          .eq('user_id', user.id)
-          .single(),
+      // Fetch pembelian data with all relations
+      const { data: pembelianData, error: pembelianError } = await supabase
+        .from('pembelian')
+        .select(`
+          *,
+          bahan_baku:bahan_baku_id(
+            id,
+            nama_bahan_baku,
+            unit_dasar:unit_dasar_id(nama_unit)
+          ),
+          suppliers:supplier_id(
+            id,
+            nama_supplier
+          ),
+          kemasan:kemasan_id(
+            id,
+            nama_kemasan,
+            nilai_konversi
+          )
+        `)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (pembelianError) throw pembelianError;
+      if (!pembelianData) {
+        toast.error('Data pembelian tidak ditemukan');
+        router.push('/dashboard/pembelian');
+        return;
+      }
+
+      // Fetch all required lists
+      const [bahanBakuResponse, supplierResponse] = await Promise.all([
         supabase
           .from('bahan_baku')
-          .select('id, nama_bahan_baku, unit')
+          .select(`
+            id, 
+            nama_bahan_baku, 
+            unit_dasar:unit_dasar_id(nama_unit)
+          `)
           .eq('user_id', user.id)
-          .order('nama_bahan_baku')
+          .order('nama_bahan_baku'),
+        supabase
+          .from('suppliers')
+          .select('id, nama_supplier, kontak')
+          .eq('user_id', user.id)
+          .order('nama_supplier')
       ]);
 
-      if (pembelianResponse.error) throw pembelianResponse.error;
       if (bahanBakuResponse.error) throw bahanBakuResponse.error;
+      if (supplierResponse.error) throw supplierResponse.error;
 
-      const pembelian = pembelianResponse.data as Pembelian;
-      setBahanBakuList(bahanBakuResponse.data || []);
+      // Process bahan baku data to handle unit_dasar array
+      const processedBahanBaku = (bahanBakuResponse.data || []).map(item => ({
+        ...item,
+        unit_dasar: Array.isArray(item.unit_dasar) ? item.unit_dasar[0] : item.unit_dasar
+      }));
       
+      setBahanBakuList(processedBahanBaku);
+      setSupplierList(supplierResponse.data || []);
+      
+      // Set selected bahan baku
+      const selectedBahan = processedBahanBaku.find(b => b.id === pembelianData.bahan_baku_id);
+      setSelectedBahan(selectedBahan || null);
+
+      // Fetch kemasan for selected bahan baku
+      if (pembelianData.bahan_baku_id) {
+        const { data: kemasanData, error: kemasanError } = await supabase
+          .from('kemasan')
+          .select(`
+            id,
+            nama_kemasan,
+            nilai_konversi,
+            unit_dasar:unit_dasar_id(nama_unit)
+          `)
+          .eq('user_id', user.id)
+          .order('nama_kemasan');
+
+        if (!kemasanError) {
+          // Process kemasan data to handle unit_dasar array
+          const processedKemasan = (kemasanData || []).map(item => ({
+            ...item,
+            unit_dasar: Array.isArray(item.unit_dasar) ? item.unit_dasar[0] : item.unit_dasar
+          }));
+          
+          setKemasanList(processedKemasan);
+        }
+      }
+
       setFormData({
-        bahan_baku_id: pembelian.bahan_baku_id,
-        jumlah: pembelian.jumlah,
-        harga_beli: pembelian.harga_beli,
-        tanggal: new Date(pembelian.tanggal).toISOString().split('T')[0],
-        catatan: pembelian.catatan || ''
+        bahan_baku_id: pembelianData.bahan_baku_id,
+        supplier_id: pembelianData.supplier_id || '',
+        kemasan_id: pembelianData.kemasan_id || '',
+        jumlah: pembelianData.jumlah,
+        harga_beli: pembelianData.harga_beli,
+        tanggal: pembelianData.tanggal.split('T')[0],
+        catatan: pembelianData.catatan || '',
+        asal_barang: pembelianData.asal_barang || 'langsung'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching data:', error);
-      toast.error('Gagal memuat data pembelian');
+      toast.error(error.message || 'Gagal memuat data');
       router.push('/dashboard/pembelian');
     } finally {
       setInitialLoading(false);
@@ -142,15 +247,31 @@ export default function EditPembelianPage() {
         return;
       }
 
+      const updateData: any = {
+        bahan_baku_id: formData.bahan_baku_id,
+        jumlah: formData.jumlah,
+        harga_beli: formData.harga_beli,
+        tanggal: new Date(formData.tanggal).toISOString(),
+        catatan: formData.catatan || null,
+        asal_barang: formData.asal_barang
+      };
+
+      // Tambahkan supplier_id dan kemasan_id jika ada
+      if (formData.supplier_id) {
+        updateData.supplier_id = formData.supplier_id;
+      } else {
+        updateData.supplier_id = null;
+      }
+      
+      if (formData.kemasan_id) {
+        updateData.kemasan_id = formData.kemasan_id;
+      } else {
+        updateData.kemasan_id = null;
+      }
+
       const { error } = await supabase
         .from('pembelian')
-        .update({
-          bahan_baku_id: formData.bahan_baku_id,
-          jumlah: formData.jumlah,
-          harga_beli: formData.harga_beli,
-          tanggal: new Date(formData.tanggal).toISOString(),
-          catatan: formData.catatan || null
-        })
+        .update(updateData)
         .eq('id', id)
         .eq('user_id', user.id);
 
@@ -182,7 +303,7 @@ export default function EditPembelianPage() {
 
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-white dark:bg-gray-900">
         <Navbar 
           title="Edit Pembelian" 
           showBackButton={true}
@@ -199,10 +320,10 @@ export default function EditPembelianPage() {
     );
   }
 
-  const selectedBahan = bahanBakuList.find(b => b.id === formData.bahan_baku_id);
+
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <Navbar 
         title="Edit Pembelian" 
         showBackButton={true}
@@ -219,91 +340,165 @@ export default function EditPembelianPage() {
           </CardHeader>
           <CardContent>
             <form id="pembelian-form" onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="asal_barang">Asal Barang *</Label>
+                  <select
+                    id="asal_barang"
+                    value={formData.asal_barang}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      asal_barang: e.target.value as 'langsung' | 'reservasi',
+                      supplier_id: '', // Reset supplier saat ganti asal barang
+                      kemasan_id: '' // Reset kemasan saat ganti asal barang
+                    }))}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="langsung">Pembelian Langsung</option>
+                    <option value="reservasi">Dari Reservasi Stok</option>
+                  </select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="bahan_baku_id">Bahan Baku *</Label>
                   <Select
                     value={formData.bahan_baku_id}
-                    onValueChange={(value) => handleSelectChange('bahan_baku_id', value)}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih bahan baku" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bahanBakuList.map((bahan) => (
-                      <SelectItem key={bahan.id} value={bahan.id}>
-                        {bahan.nama_bahan_baku}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    onValueChange={(value) => {
+                      handleSelectChange('bahan_baku_id', value);
+                      setFormData(prev => ({ ...prev, kemasan_id: '' })); // Reset kemasan
+                    }}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih bahan baku" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bahanBakuList.map((bahan) => (
+                        <SelectItem key={bahan.id} value={bahan.id}>
+                          {bahan.nama_bahan_baku}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedBahan && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Satuan: {selectedBahan.unit_dasar?.nama_unit || 'Tidak ada'}
+                    </p>
+                  )}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tanggal">Tanggal Pembelian *</Label>
-                <Input
-                  id="tanggal"
-                  name="tanggal"
-                  type="date"
-                  value={formData.tanggal}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="jumlah">Jumlah *</Label>
-                <Input
-                  id="jumlah"
-                  name="jumlah"
-                  type="number"
-                  value={formData.jumlah}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan jumlah"
-                  min="1"
-                  step="0.01"
-                  required
-                  className="w-full"
-                />
-                {selectedBahan && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Satuan: {selectedBahan.unit}
-                  </p>
+                {formData.asal_barang === 'reservasi' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="supplier_id">Supplier *</Label>
+                    <Select
+                      value={formData.supplier_id}
+                      onValueChange={(value) => handleSelectChange('supplier_id', value)}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih supplier" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {supplierList.map((supplier) => (
+                          <SelectItem key={supplier.id} value={supplier.id}>
+                            {supplier.nama_supplier}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="harga_beli">Harga Beli *</Label>
-                <Input
-                  id="harga_beli"
-                  name="harga_beli"
-                  type="number"
-                  value={formData.harga_beli}
-                  onChange={handleInputChange}
-                  placeholder="Masukkan harga beli"
-                  required
-                  className="w-full"
-                />
-              </div>
-            </div>
+                {kemasanList.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="kemasan_id">Kemasan (Opsional)</Label>
+                    <Select
+                      value={formData.kemasan_id}
+                      onValueChange={(value) => handleSelectChange('kemasan_id', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={`Gunakan satuan dasar (${selectedBahan?.unit_dasar?.nama_unit || ''})`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Gunakan satuan dasar ({selectedBahan?.unit_dasar?.nama_unit || ''})</SelectItem>
+                        {kemasanList.map((kemasan) => (
+                          <SelectItem key={kemasan.id} value={kemasan.id}>
+                            {kemasan.nama_kemasan} (1 {kemasan.nama_kemasan} = {kemasan.nilai_konversi} {selectedBahan?.unit_dasar?.nama_unit || ''})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-            <div className="space-y-2">
-              <Label htmlFor="catatan">Catatan</Label>
-              <Textarea
-                id="catatan"
-                name="catatan"
-                value={formData.catatan}
-                onChange={handleInputChange}
-                placeholder="Catatan tambahan (opsional)"
-                rows={3}
-                className="w-full"
-              />
-            </div>
-          </form>
+                <div className="space-y-2">
+                  <Label htmlFor="tanggal">Tanggal Pembelian *</Label>
+                  <Input
+                    id="tanggal"
+                    name="tanggal"
+                    type="date"
+                    value={formData.tanggal}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="jumlah">Jumlah *</Label>
+                  <Input
+                    id="jumlah"
+                    name="jumlah"
+                    type="number"
+                    value={formData.jumlah}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan jumlah"
+                    min="1"
+                    step="0.01"
+                    required
+                    className="w-full"
+                  />
+                  {formData.kemasan_id && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Satuan: {kemasanList.find(k => k.id === formData.kemasan_id)?.nama_kemasan || ''}
+                    </p>
+                  )}
+                  {!formData.kemasan_id && selectedBahan && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Satuan: {selectedBahan.unit_dasar?.nama_unit || ''}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="harga_beli">Harga Beli *</Label>
+                  <Input
+                    id="harga_beli"
+                    name="harga_beli"
+                    type="number"
+                    value={formData.harga_beli}
+                    onChange={handleInputChange}
+                    placeholder="Masukkan harga beli"
+                    required
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="catatan">Catatan</Label>
+                  <Textarea
+                    id="catatan"
+                    name="catatan"
+                    value={formData.catatan}
+                    onChange={handleInputChange}
+                    placeholder="Catatan tambahan (opsional)"
+                    rows={3}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </div>

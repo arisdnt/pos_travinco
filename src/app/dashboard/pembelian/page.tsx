@@ -58,7 +58,19 @@ export default function PembelianPage() {
         .from('pembelian')
         .select(`
           *,
-          bahan_baku:bahan_baku_id(nama_bahan_baku, unit)
+          bahan_baku:bahan_baku_id(
+            nama_bahan_baku,
+            unit_dasar:unit_dasar_id(nama_unit)
+          ),
+          suppliers:supplier_id(
+            nama_supplier,
+            kontak
+          ),
+          kemasan:kemasan_id(
+            nama_kemasan,
+            nilai_konversi,
+            unit_dasar:unit_dasar_id(nama_unit)
+          )
         `)
         .eq('user_id', user.id)
         .order('tanggal', { ascending: false });
@@ -77,7 +89,19 @@ export default function PembelianPage() {
           .from('pembelian')
           .select(`
             *,
-            bahan_baku:bahan_baku_id(nama_bahan_baku, unit)
+            bahan_baku:bahan_baku_id(
+              nama_bahan_baku,
+              unit_dasar:unit_dasar_id(nama_unit)
+            ),
+            suppliers:supplier_id(
+              nama_supplier,
+              kontak
+            ),
+            kemasan:kemasan_id(
+              nama_kemasan,
+              nilai_konversi,
+              unit_dasar:unit_dasar_id(nama_unit)
+            )
           `)
           .order('tanggal', { ascending: false });
         
@@ -155,7 +179,7 @@ export default function PembelianPage() {
       {
         accessorKey: "bahan_baku",
         header: ({ column }) => (
-          <SortableHeader column={column}>Bahan</SortableHeader>
+          <SortableHeader column={column}>Bahan Baku</SortableHeader>
         ),
         cell: ({ row }) => (
           <div>
@@ -163,19 +187,90 @@ export default function PembelianPage() {
               {row.original.bahan_baku?.nama_bahan_baku || 'N/A'}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              {row.original.catatan || ''}
+              {row.original.catatan || 'Tidak ada catatan'}
             </div>
           </div>
         ),
       },
       {
+        accessorKey: "asal_barang",
+        header: "Asal Barang",
+        cell: ({ row }) => {
+          const asalBarang = row.getValue("asal_barang") as string;
+          return (
+            <Badge variant={asalBarang === 'reservasi' ? 'secondary' : 'default'}>
+              {asalBarang === 'reservasi' ? 'Dari Reservasi' : 'Pembelian Langsung'}
+            </Badge>
+          );
+        },
+      },
+      {
+        id: "supplier",
+        header: "Supplier",
+        cell: ({ row }) => {
+          const supplier = row.original.suppliers;
+          const asalBarang = row.original.asal_barang;
+          
+          if (asalBarang === 'reservasi' && supplier) {
+            return (
+              <div>
+                <div className="font-medium text-gray-900 dark:text-white">
+                  {supplier.nama_supplier}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {supplier.kontak || 'Tidak ada kontak'}
+                </div>
+              </div>
+            );
+          }
+          return <span className="text-gray-400">-</span>;
+        },
+      },
+      {
         accessorKey: "jumlah",
         header: "Jumlah",
-        cell: ({ row }) => (
-          <div className="font-medium text-gray-900 dark:text-white">
-            {row.getValue("jumlah")} {row.original.bahan_baku?.unit || ''}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const jumlah = row.getValue("jumlah") as number;
+          const kemasan = row.original.kemasan;
+          const bahanBaku = row.original.bahan_baku;
+          
+          if (kemasan) {
+            // Logika perbaikan: jika jumlah dalam satuan dasar, hitung pieces
+            // jika jumlah sudah dalam pieces, gunakan langsung
+            let pieces;
+            
+            if (jumlah >= kemasan.nilai_konversi) {
+              // Jumlah dalam satuan dasar, hitung pieces
+              pieces = Math.round(jumlah / kemasan.nilai_konversi);
+            } else if (jumlah < 1 && jumlah > 0) {
+              // Kemungkinan jumlah sudah dalam pieces tapi dalam desimal
+              pieces = Math.max(1, Math.round(jumlah * kemasan.nilai_konversi / kemasan.nilai_konversi));
+            } else {
+              // Jumlah sudah dalam pieces
+              pieces = Math.max(1, Math.round(jumlah));
+            }
+            
+            const ukuranKemasan = kemasan.nilai_konversi;
+            const unitDasar = kemasan.unit_dasar?.nama_unit || bahanBaku?.unit_dasar?.nama_unit || 'unit';
+            
+            return (
+              <div className="font-medium text-gray-900 dark:text-white">
+                <div>{pieces} pcs</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  @ {ukuranKemasan.toLocaleString('id-ID')} {unitDasar} per {kemasan.nama_kemasan}
+                </div>
+              </div>
+            );
+          } else {
+            // Jika tidak ada kemasan, tampilkan dalam unit dasar
+            const unitDasar = bahanBaku?.unit_dasar?.nama_unit || 'unit';
+            return (
+              <div className="font-medium text-gray-900 dark:text-white">
+                {jumlah.toLocaleString('id-ID')} {unitDasar}
+              </div>
+            );
+          }
+        },
       },
       {
         accessorKey: "harga_beli",

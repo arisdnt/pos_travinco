@@ -53,7 +53,16 @@
   * {
     @apply border-border;
   }
+  html {
+    @apply bg-white;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-white text-foreground;
+  }
+  html.dark {
+    @apply bg-gray-900;
+  }
+  html.dark body {
+    @apply bg-gray-900;
   }
 }

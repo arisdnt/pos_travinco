@@ -52,7 +52,10 @@ export default function ResepPage() {
         .select(`
           produk_jadi_id,
           produk_jadi:produk_jadi_id(nama_produk_jadi, harga_jual, sku, created_at),
-          bahan_baku:bahan_baku_id(nama_bahan_baku, unit),
+          bahan_baku:bahan_baku_id(
+            nama_bahan_baku,
+            unit_dasar:unit_dasar_id(nama_unit)
+          ),
           jumlah_dibutuhkan
         `);
 
@@ -66,7 +69,7 @@ export default function ResepPage() {
           existingProduct.bahan_baku_list.push({
             nama: item.bahan_baku?.nama_bahan_baku,
             jumlah: item.jumlah_dibutuhkan,
-            unit: item.bahan_baku?.unit
+            unit: item.bahan_baku?.unit_dasar?.nama_unit || 'unit'
           });
           existingProduct.jumlah_bahan_baku += 1;
         } else {
@@ -80,7 +83,7 @@ export default function ResepPage() {
             bahan_baku_list: [{
               nama: item.bahan_baku?.nama_bahan_baku,
               jumlah: item.jumlah_dibutuhkan,
-              unit: item.bahan_baku?.unit
+              unit: item.bahan_baku?.unit_dasar?.nama_unit || 'unit'
             }]
           });
         }
@@ -176,7 +179,7 @@ export default function ResepPage() {
           <div className="max-w-xs">
             {row.original.bahan_baku_list?.slice(0, 3).map((bahan: any, index: number) => (
               <div key={index} className="text-sm text-gray-600 dark:text-gray-400">
-                {bahan.nama}: {bahan.jumlah} {bahan.unit}
+                {bahan.nama}: <span className="text-red-600 font-medium">{bahan.jumlah}</span> <span className="text-red-600 font-medium">{bahan.unit}</span>
               </div>
             ))}
             {row.original.bahan_baku_list?.length > 3 && (

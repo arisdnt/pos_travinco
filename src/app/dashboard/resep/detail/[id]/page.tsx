@@ -25,8 +25,10 @@ interface ResepDetail {
   bahan_baku: {
     id: string;
     nama_bahan_baku: string;
-    unit: string;
     stok: number;
+    unit_dasar?: {
+      nama_unit: string;
+    };
   };
 }
 
@@ -62,8 +64,8 @@ export default function DetailResepPage() {
           bahan_baku (
             id,
             nama_bahan_baku,
-            unit,
-            stok
+            stok,
+            unit_dasar:unit_dasar_id(nama_unit)
           )
         `)
         .eq('produk_jadi_id', produkJadiId)
@@ -326,7 +328,7 @@ export default function DetailResepPage() {
                             </h3>
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Satuan: {item.bahan_baku.unit}
+                            Satuan: {item.bahan_baku.unit_dasar?.nama_unit || '-'}
                           </p>
                         </div>
 
@@ -336,7 +338,7 @@ export default function DetailResepPage() {
                               Dibutuhkan per Unit
                             </label>
                             <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {formatNumber(item.jumlah_dibutuhkan)} {item.bahan_baku.unit}
+                              {formatNumber(item.jumlah_dibutuhkan)} {item.bahan_baku.unit_dasar?.nama_unit || '-'}
                             </p>
                           </div>
                           <div>
@@ -344,7 +346,7 @@ export default function DetailResepPage() {
                               Stok Tersedia
                             </label>
                             <p className={`text-sm font-semibold ${stokStatus.color}`}>
-                              {formatNumber(item.bahan_baku.stok)} {item.bahan_baku.unit}
+                              {formatNumber(item.bahan_baku.stok)} {item.bahan_baku.unit_dasar?.nama_unit || '-'}
                             </p>
                           </div>
                         </div>

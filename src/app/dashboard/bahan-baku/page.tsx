@@ -31,12 +31,11 @@ type BahanBaku = {
   id: string
   nama_bahan_baku: string
   stok: number
-  unit: string
+  nama_unit: string
+  nama_kategori: string
   user_id: string
   created_at: string
 }
-
-// Helper functions removed as kategori field doesn't exist in database
 
 export default function BahanBakuPage() {
   const router = useRouter();
@@ -86,7 +85,10 @@ export default function BahanBakuPage() {
 
   const handleDelete = async (id: string) => {
     const item = data.find(d => d.id === id);
-    if (!item) return;
+    if (!item) {
+      toast.error('Item tidak ditemukan');
+      return;
+    }
     
     const confirmed = window.confirm(
       `Apakah Anda yakin ingin menghapus bahan baku "${item.nama_bahan_baku}"?`
@@ -95,25 +97,60 @@ export default function BahanBakuPage() {
     if (!confirmed) return;
 
     try {
+      // Show loading state
+      toast.loading('Menghapus bahan baku...', { id: 'delete-loading' });
+      
       const user = await getCurrentUser();
       if (!user) {
-        toast.error('Anda harus login terlebih dahulu');
+        toast.error('Anda harus login terlebih dahulu', { id: 'delete-loading' });
         return;
       }
 
-      const { error } = await supabase
+      console.log('Attempting to delete:', { id, user_id: user.id, item_name: item.nama_bahan_baku });
+
+      // First check if item exists and belongs to user
+      const { data: checkData, error: checkError } = await supabase
+        .from('bahan_baku')
+        .select('id, nama_bahan_baku, user_id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (checkError) {
+        console.error('Check error:', checkError);
+        if (checkError.code === 'PGRST116') {
+          toast.error('Item tidak ditemukan atau Anda tidak memiliki akses', { id: 'delete-loading' });
+        } else {
+          toast.error(`Error saat verifikasi: ${checkError.message}`, { id: 'delete-loading' });
+        }
+        return;
+      }
+
+      if (!checkData) {
+        toast.error('Item tidak ditemukan atau Anda tidak memiliki akses', { id: 'delete-loading' });
+        return;
+      }
+
+      console.log('Item verified, proceeding with delete:', checkData);
+
+      // Proceed with delete
+      const { error: deleteError } = await supabase
         .from('bahan_baku')
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (deleteError) {
+        console.error('Delete error:', deleteError);
+        throw deleteError;
+      }
 
-      toast.success('Bahan baku berhasil dihapus!');
+      console.log('Delete successful');
+      toast.success('Bahan baku berhasil dihapus!', { id: 'delete-loading' });
       fetchData(); // Refresh data
     } catch (error: any) {
       console.error('Error deleting bahan baku:', error);
-      toast.error(error.message || 'Gagal menghapus bahan baku');
+      toast.error(error.message || 'Gagal menghapus bahan baku', { id: 'delete-loading' });
     }
   }
 
@@ -134,8 +171,20 @@ export default function BahanBakuPage() {
               {row.getValue("nama_bahan_baku")}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              {row.original.unit}
+              {row.original.nama_kategori || 'Tanpa Kategori'}
             </div>
+          </div>
+        ),
+      },
+
+      {
+        accessorKey: "nama_unit",
+        header: ({ column }) => (
+          <SortableHeader column={column}>Unit</SortableHeader>
+        ),
+        cell: ({ row }) => (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {row.original.nama_unit || 'Unit tidak tersedia'}
           </div>
         ),
       },
@@ -147,7 +196,7 @@ export default function BahanBakuPage() {
         ),
         cell: ({ row }) => {
           const stok = row.getValue("stok") as number;
-          const unit = row.original.unit;
+          const unit = row.original.nama_unit || 'unit';
           const status = getStokStatus(stok);
           return (
             <div className={`font-medium ${status.color}`}>
