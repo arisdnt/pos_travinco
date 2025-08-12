@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle, CheckCircle, Filter, MoreHorizontal, TrendingUp, DollarSign, Eye, Truck, XCircle, Package2 } from "lucide-react"
-import { BahanBakuForm } from "@/components/forms/bahan-baku-form"
+
 import { formatNumber, formatCurrency, formatDateTime } from "@/lib/utils"
 import { DataTable, SortableHeader, ActionDropdown } from "@/components/ui/data-table"
 import {
@@ -42,7 +42,6 @@ export default function BahanBakuPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false)
   const [editingItem, setEditingItem] = useState<BahanBaku | null>(null)
   const [stats, setStats] = useState({
     total: 0,
@@ -118,10 +117,7 @@ export default function BahanBakuPage() {
     }
   }
 
-  const handleFormClose = () => {
-    setShowForm(false)
-    setEditingItem(null)
-  }
+
 
   // Stats calculations moved to fetchData function
 
@@ -210,7 +206,7 @@ export default function BahanBakuPage() {
   const navbarActions = [
     {
       label: "Tambah Bahan Baku",
-      onClick: () => setShowForm(true),
+      onClick: () => router.push('/dashboard/bahan-baku/add'),
       icon: Plus,
       variant: "default" as const
     },
@@ -286,14 +282,7 @@ export default function BahanBakuPage() {
         </CardContent>
       </Card>
 
-      {/* Form Modal */}
-      {showForm && (
-        <BahanBakuForm
-          item={editingItem}
-          onClose={handleFormClose}
-          onSuccess={handleFormClose}
-        />
-      )}
+
       </div>
     </div>
   )
