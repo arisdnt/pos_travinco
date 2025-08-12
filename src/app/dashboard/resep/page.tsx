@@ -46,16 +46,55 @@ export default function ResepPage() {
 
   const fetchResepData = async () => {
     try {
+      // Ambil data resep yang sudah dikelompokkan berdasarkan produk_jadi_id
       const { data: resepData, error } = await supabase
         .from('resep')
         .select(`
-          *,
-          produk_jadi:produk_jadi_id(nama_produk_jadi, harga_jual),
-          bahan_baku:bahan_baku_id(nama_bahan_baku, unit)
+          produk_jadi_id,
+          produk_jadi:produk_jadi_id(nama_produk_jadi, harga_jual, sku, created_at),
+          bahan_baku:bahan_baku_id(nama_bahan_baku, unit),
+          jumlah_dibutuhkan
         `);
 
       if (error) throw error;
-      setData(resepData || []);
+
+      // Kelompokkan data berdasarkan produk_jadi_id
+      const groupedData = resepData?.reduce((acc: any[], item: any) => {
+        const existingProduct = acc.find(p => p.produk_jadi_id === item.produk_jadi_id);
+        
+        if (existingProduct) {
+          existingProduct.bahan_baku_list.push({
+            nama: item.bahan_baku?.nama_bahan_baku,
+            jumlah: item.jumlah_dibutuhkan,
+            unit: item.bahan_baku?.unit
+          });
+          existingProduct.jumlah_bahan_baku += 1;
+        } else {
+          acc.push({
+            produk_jadi_id: item.produk_jadi_id,
+            nama_produk_jadi: item.produk_jadi?.nama_produk_jadi,
+            harga_jual: item.produk_jadi?.harga_jual,
+            sku: item.produk_jadi?.sku,
+            created_at: item.produk_jadi?.created_at,
+            jumlah_bahan_baku: 1,
+            bahan_baku_list: [{
+              nama: item.bahan_baku?.nama_bahan_baku,
+              jumlah: item.jumlah_dibutuhkan,
+              unit: item.bahan_baku?.unit
+            }]
+          });
+        }
+        return acc;
+      }, []) || [];
+
+      // Urutkan data berdasarkan created_at (terbaru di atas)
+      const sortedData = groupedData.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA; // Descending order (terbaru di atas)
+      });
+
+      setData(sortedData);
     } catch (error) {
       console.error('Error fetching resep data:', error);
     } finally {
@@ -63,15 +102,15 @@ export default function ResepPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm('Apakah Anda yakin ingin menghapus resep ini?');
+  const handleDelete = async (produkJadiId: string) => {
+    const confirmed = window.confirm('Apakah Anda yakin ingin menghapus seluruh resep untuk produk ini?');
     if (!confirmed) return;
 
     try {
       const { error } = await supabase
         .from('resep')
         .delete()
-        .eq('id', id);
+        .eq('produk_jadi_id', produkJadiId);
 
       if (error) throw error;
 
@@ -85,55 +124,66 @@ export default function ResepPage() {
 
   const filteredData = data.filter(item => {
     const matchesSearch = searchTerm === '' ||
-      item.produk_jadi?.nama_produk_jadi?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.bahan_baku?.nama_bahan_baku?.toLowerCase().includes(searchTerm.toLowerCase())
+      item.nama_produk_jadi?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.bahan_baku_list?.some((bahan: any) => 
+        bahan.nama?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     return matchesSearch
   })
 
   const totalResep = data.length;
-  const uniqueProducts = Array.from(new Set(data.map(item => item.produk_jadi?.nama_produk_jadi))).length;
-    const uniqueIngredients = Array.from(new Set(data.map(item => item.bahan_baku?.nama_bahan_baku))).length;
-  const totalIngredients = data.reduce((sum, item) => sum + (item.jumlah_dibutuhkan || 0), 0);
+  const uniqueProducts = data.length;
+  const uniqueIngredients = Array.from(new Set(
+    data.flatMap(item => item.bahan_baku_list?.map((bahan: any) => bahan.nama) || [])
+  )).length;
+  const totalIngredients = data.reduce((sum, item) => sum + (item.jumlah_bahan_baku || 0), 0);
   const avgIngredientsPerRecipe = uniqueProducts > 0 ? totalIngredients / uniqueProducts : 0;
 
   const columns = useMemo<ColumnDef<any>[]>(
     () => [
       {
-        accessorKey: "produk_jadi",
+        accessorKey: "nama_produk_jadi",
         header: ({ column }) => (
           <SortableHeader column={column}>Produk</SortableHeader>
         ),
         cell: ({ row }) => (
           <div>
             <div className="font-medium text-gray-900 dark:text-white">
-              {row.original.produk_jadi?.nama_produk_jadi || '-'}
+              {row.original.nama_produk_jadi || '-'}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              Harga: {formatCurrency(row.original.produk_jadi?.harga_jual || 0)}
+              SKU: {row.original.sku || '-'}
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Harga: {formatCurrency(row.original.harga_jual || 0)}
             </div>
           </div>
         ),
       },
       {
-        accessorKey: "bahan_baku",
-        header: "Bahan Baku",
-        cell: ({ row }) => (
-          <div>
-            <div className="font-medium text-gray-900 dark:text-white">
-              {row.original.bahan_baku?.nama_bahan_baku || '-'}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Unit: {row.original.bahan_baku?.unit || ''}
-            </div>
-          </div>
-        ),
-      },
-      {
-        accessorKey: "jumlah_dibutuhkan",
-        header: "Jumlah",
+        accessorKey: "jumlah_bahan_baku",
+        header: "Jumlah Bahan",
         cell: ({ row }) => (
           <div className="font-medium text-gray-900 dark:text-white">
-            {row.getValue("jumlah_dibutuhkan")} {row.original.bahan_baku?.unit || ''}
+            {row.original.jumlah_bahan_baku || 0} bahan
+          </div>
+        ),
+      },
+      {
+        accessorKey: "bahan_baku_list",
+        header: "Komposisi",
+        cell: ({ row }) => (
+          <div className="max-w-xs">
+            {row.original.bahan_baku_list?.slice(0, 3).map((bahan: any, index: number) => (
+              <div key={index} className="text-sm text-gray-600 dark:text-gray-400">
+                {bahan.nama}: {bahan.jumlah} {bahan.unit}
+              </div>
+            ))}
+            {row.original.bahan_baku_list?.length > 3 && (
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                +{row.original.bahan_baku_list.length - 3} bahan lainnya
+              </div>
+            )}
           </div>
         ),
       },
@@ -156,7 +206,7 @@ export default function ResepPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => handleDelete(row.original.produk_jadi_id)}
               className="text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -252,32 +302,13 @@ export default function ResepPage() {
 
         {/* Main Content */}
         <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-            <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-              <div>
-                <CardTitle className="text-xl font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-blue-500" />
-                  Daftar Resep
-                </CardTitle>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Kelola resep produksi parfum Anda
-                </p>
-              </div>
-              <Button 
-                onClick={handleAdd}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Tambah Resep
-              </Button>
-            </div>
-          </CardHeader>
           <CardContent className="p-6">
             <DataTable 
               columns={columns} 
               data={filteredData} 
-              searchKey="produk_jadi"
+              searchKey="nama_produk_jadi"
               searchPlaceholder="Cari produk atau bahan baku..."
+              hideColumnToggle={true}
             />
           </CardContent>
         </Card>

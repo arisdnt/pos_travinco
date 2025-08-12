@@ -11,7 +11,7 @@ import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-table';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
-import { supabase } from '@/lib/supabase';
+import { supabase, getCurrentUser } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -23,26 +23,83 @@ export default function PembelianPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    console.log('🚀 Component mounted, memulai fetch data...');
     fetchPembelianData();
   }, []);
 
+  // Log perubahan data
+  useEffect(() => {
+    console.log('📈 Data pembelian berubah:', {
+      count: data.length,
+      items: data.slice(0, 3) // Log 3 item pertama untuk debugging
+    });
+  }, [data]);
+
   const fetchPembelianData = async () => {
     try {
-      const { data: pembelianData, error } = await supabase
+      console.log('🔄 Memulai fetchPembelianData...');
+      setLoading(true);
+      
+      const user = await getCurrentUser();
+      console.log('👤 User data:', user);
+      
+      if (!user) {
+        console.error('❌ User tidak ditemukan');
+        toast.error('User tidak ditemukan');
+        return;
+      }
+
+      console.log('🔍 Mengambil data pembelian untuk user_id:', user.id);
+      
+      // First try with user_id filter
+      let { data: pembelianData, error } = await supabase
         .from('pembelian')
         .select(`
           *,
           bahan_baku:bahan_baku_id(nama_bahan_baku, unit)
-        `);
+        `)
+        .eq('user_id', user.id)
+        .order('tanggal', { ascending: false });
+
+      console.log('📊 Query result untuk user pembelian:', {
+        data: pembelianData,
+        error: error,
+        count: pembelianData?.length || 0
+      });
+
+      // If no data found with user_id, try without user_id filter (for sample data)
+      if (!error && (!pembelianData || pembelianData.length === 0)) {
+        console.log('⚠️ Tidak ada data user, mencoba mengambil data sampel...');
+        
+        const { data: sampleData, error: sampleError } = await supabase
+          .from('pembelian')
+          .select(`
+            *,
+            bahan_baku:bahan_baku_id(nama_bahan_baku, unit)
+          `)
+          .order('tanggal', { ascending: false });
+        
+        console.log('📊 Query result untuk sample data:', {
+          data: sampleData,
+          error: sampleError,
+          count: sampleData?.length || 0
+        });
+        
+        if (!sampleError) {
+          pembelianData = sampleData;
+        }
+      }
 
       if (error) throw error;
+      console.log('📝 Setting data:', pembelianData?.length || 0, 'items');
       setData(pembelianData || []);
     } catch (error) {
-      console.error('Error fetching pembelian data:', error);
+      console.error('💥 Error fetching pembelian data:', error);
+      toast.error('Gagal memuat data pembelian');
     } finally {
+      console.log('✅ fetchPembelianData selesai');
       setLoading(false);
     }
   };
@@ -61,26 +118,28 @@ export default function PembelianPage() {
     }
 
     try {
+      console.log('🗑️ Menghapus pembelian dengan id:', id);
+      
       const { error } = await supabase
         .from('pembelian')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error deleting pembelian:', error);
+        throw error;
+      }
+
+      console.log('✅ Pembelian berhasil dihapus');
       toast.success('Data pembelian berhasil dihapus');
       fetchPembelianData();
     } catch (error) {
-      console.error('Error deleting pembelian:', error);
+      console.error('💥 Error deleting pembelian:', error);
       toast.error('Gagal menghapus data pembelian');
     }
   };
 
-  const filteredData = data.filter(item => {
-    const matchesSearch = searchTerm === '' ||
-      item.bahan_baku?.nama_bahan_baku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.catatan?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
-  })
+  // DataTable handles filtering internally with searchKey
 
   const totalPembelian = data.reduce((sum, item) => sum + (item.harga_beli || 0), 0);
   const totalTransaksi = data.length;
@@ -232,18 +291,13 @@ export default function PembelianPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              Daftar Pembelian
-            </CardTitle>
-          </CardHeader>
           <CardContent>
             <DataTable
               columns={columns}
-              data={filteredData}
-              searchKey="bahan_baku"
+              data={data}
+              searchKey="bahan_baku.nama_bahan_baku"
               searchPlaceholder="Cari bahan baku..."
+              hideColumnToggle={true}
             />
           </CardContent>
         </Card>

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { BahanBakuSearchInput } from '@/components/ui/bahan-baku-search-input';
 import { Save, ShoppingCart } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -153,22 +153,13 @@ function AddPembelianPage() {
               <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="bahan_baku_id">Bahan Baku *</Label>
-                  <Select
+                  <BahanBakuSearchInput
+                    bahanBakuList={bahanBakuList}
                     value={formData.bahan_baku_id}
-                    onValueChange={(value) => handleSelectChange('bahan_baku_id', value)}
-                    required
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Pilih bahan baku" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bahanBakuList.map((bahan) => (
-                        <SelectItem key={bahan.id} value={bahan.id}>
-                          {bahan.nama_bahan_baku}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onSelect={(value) => handleSelectChange('bahan_baku_id', value)}
+                    placeholder="Cari bahan baku..."
+                    className="w-full"
+                  />
                 </div>
 
                 <div className="space-y-2">

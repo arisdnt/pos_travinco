@@ -6,7 +6,7 @@ import Providers from "@/components/providers"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Aura Flow - Inventaris Parfum",
+  title: "Travinco - Parfum Stok x Nilam",
   description: "Aplikasi manajemen inventaris internal untuk bisnis parfum",
 }
 

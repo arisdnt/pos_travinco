@@ -246,18 +246,13 @@ export default function PenjualanPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              Daftar Penjualan
-            </CardTitle>
-          </CardHeader>
           <CardContent>
             <DataTable
               columns={columns}
               data={penjualanData}
               searchKey="produk_jadi.nama_produk_jadi"
               searchPlaceholder="Cari produk..."
+              hideColumnToggle={true}
             />
           </CardContent>
         </Card>

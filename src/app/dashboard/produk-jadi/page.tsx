@@ -294,32 +294,13 @@ export default function ProdukJadiPage() {
 
         {/* Main Content */}
         <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-            <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-              <div>
-                <CardTitle className="text-xl font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                  <Package className="w-5 h-5 text-blue-500" />
-                  Daftar Produk Jadi
-                </CardTitle>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Kelola inventaris produk jadi parfum Anda
-                </p>
-              </div>
-              <Button 
-                onClick={handleAdd}
-                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Tambah Produk Jadi
-              </Button>
-            </div>
-          </CardHeader>
           <CardContent className="p-6">
             <DataTable 
               columns={columns} 
               data={filteredData} 
               searchKey="nama_produk_jadi"
               searchPlaceholder="Cari produk..."
+              hideColumnToggle={true}
             />
           </CardContent>
         </Card>

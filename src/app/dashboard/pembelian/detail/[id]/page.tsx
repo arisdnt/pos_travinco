@@ -287,35 +287,65 @@ export default function DetailPembelianPage() {
             </Card>
           )}
 
-          {/* Summary Card */}
-          <Card className="shadow-lg md:col-span-2 xl:col-span-3">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Ringkasan Pembelian
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
-                <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                    Jumlah Dibeli
-                  </p>
-                  <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                    {pembelian.jumlah.toLocaleString('id-ID')}
-                  </p>
-                  <p className="text-sm text-blue-600 dark:text-blue-400">
-                    {pembelian.bahan_baku.unit}
-                  </p>
+          {/* Invoice Summary */}
+          <Card className="shadow-sm border-l-4 border-l-blue-500 md:col-span-2 xl:col-span-3">
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Ringkasan Pembelian
+                  </h3>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Invoice #{pembelian.id.slice(-8).toUpperCase()}
+                  </div>
                 </div>
-                
-                <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                    Total Harga Beli
-                  </p>
-                  <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                    {formatCurrency(pembelian.harga_beli)}
-                  </p>
+
+                {/* Summary Items */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Jumlah Dibeli
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        {pembelian.jumlah.toLocaleString('id-ID')}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
+                        {pembelian.bahan_baku.unit}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Total Harga Beli
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                        {formatCurrency(pembelian.harga_beli)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                    Transaksi pada {new Date(pembelian.tanggal).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long', 
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
                 </div>
               </div>
             </CardContent>

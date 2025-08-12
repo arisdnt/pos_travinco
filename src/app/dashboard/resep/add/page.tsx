@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ProdukJadiSearchInput } from '@/components/ui/produk-jadi-search-input';
+import { ResepBahanBakuSearchInput } from '@/components/ui/resep-bahan-baku-search-input';
 import { Save, ChefHat, Plus, Trash2 } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -39,6 +40,8 @@ export default function AddResepPage() {
   const [resepItems, setResepItems] = useState<ResepItem[]>([
     { bahan_baku_id: '', jumlah_dibutuhkan: 0 }
   ]);
+  const [existingResep, setExistingResep] = useState<any[]>([]);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     fetchBahanBaku();
@@ -75,11 +78,62 @@ export default function AddResepPage() {
     }
   };
 
-  const handleSelectChange = (field: string, value: string) => {
+  const handleSelectChange = async (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
+    
+    // Jika produk dipilih, cek apakah sudah ada resep
+    if (field === 'produk_jadi_id') {
+      if (value) {
+        await fetchExistingResep(value);
+      } else {
+        // Reset form jika produk tidak dipilih
+        setExistingResep([]);
+        setIsEditMode(false);
+        setResepItems([{ bahan_baku_id: '', jumlah_dibutuhkan: 0 }]);
+      }
+    }
+  };
+
+  const fetchExistingResep = async (produkJadiId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('resep')
+        .select(`
+          id,
+          bahan_baku_id,
+          jumlah_dibutuhkan,
+          bahan_baku:bahan_baku_id(
+            id,
+            nama_bahan_baku,
+            unit
+          )
+        `)
+        .eq('produk_jadi_id', produkJadiId);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setExistingResep(data);
+        setIsEditMode(true);
+        // Populate form dengan data existing
+        const existingItems = data.map(item => ({
+          bahan_baku_id: item.bahan_baku_id,
+          jumlah_dibutuhkan: item.jumlah_dibutuhkan
+        }));
+        setResepItems(existingItems);
+        toast.info('Resep untuk produk ini sudah ada. Anda dapat mengeditnya di sini.');
+      } else {
+        setExistingResep([]);
+        setIsEditMode(false);
+        setResepItems([{ bahan_baku_id: '', jumlah_dibutuhkan: 0 }]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching existing resep:', error);
+      toast.error('Gagal memuat resep yang ada');
+    }
   };
 
   const handleResepItemChange = (index: number, field: keyof ResepItem, value: string | number) => {
@@ -144,29 +198,55 @@ export default function AddResepPage() {
       }
       console.log('User found:', user.id);
 
-      // Check if recipe already exists for this product
+      if (isEditMode) {
+        // Mode edit - update resep yang sudah ada
+        try {
+          // Hapus resep lama
+          const { error: deleteError } = await supabase
+            .from('resep')
+            .delete()
+            .eq('produk_jadi_id', formData.produk_jadi_id);
+
+          if (deleteError) throw deleteError;
+
+          // Insert resep baru
+          const resepData = validResepItems.map(item => ({
+            produk_jadi_id: formData.produk_jadi_id,
+            bahan_baku_id: item.bahan_baku_id,
+            jumlah_dibutuhkan: item.jumlah_dibutuhkan,
+            user_id: user.id
+          }));
+
+          const { error: insertError } = await supabase
+            .from('resep')
+            .insert(resepData);
+
+          if (insertError) throw insertError;
+
+          toast.success('Resep berhasil diperbarui!');
+          router.push('/dashboard/resep');
+          return;
+        } catch (error: any) {
+          console.error('Error updating resep:', error);
+          toast.error('Gagal memperbarui resep');
+          return;
+        }
+      }
+
+      // Check if recipe already exists for this product (untuk mode tambah baru)
       console.log('Checking for existing recipe...');
-      const { data: existingResep, error: checkError } = await supabase
+      const { data: existingResepCheck, error: checkError } = await supabase
         .from('resep')
         .select('id')
         .eq('produk_jadi_id', formData.produk_jadi_id)
         .limit(1);
-      console.log('Existing resep check result:', existingResep, checkError);
+      console.log('Existing resep check result:', existingResepCheck, checkError);
 
       if (checkError) throw checkError;
 
-      if (existingResep && existingResep.length > 0) {
-        const confirmEdit = window.confirm(
-          'Resep untuk produk ini sudah ada. Apakah Anda ingin mengedit resep yang sudah ada?'
-        );
-        
-        if (confirmEdit) {
-          router.push(`/dashboard/resep/edit/${formData.produk_jadi_id}`);
-          return;
-        } else {
-          toast.error('Silakan pilih produk lain atau edit resep yang sudah ada.');
-          return;
-        }
+      if (existingResepCheck && existingResepCheck.length > 0) {
+        toast.warning('Resep untuk produk ini sudah ada. Silakan pilih produk lain atau edit resep yang sudah ada.');
+        return;
       }
 
       const resepData = validResepItems.map(item => ({
@@ -208,7 +288,7 @@ export default function AddResepPage() {
 
   const navbarActions = [
     {
-      label: 'Simpan Resep',
+      label: isEditMode ? 'Perbarui Resep' : 'Simpan Resep',
       onClick: () => {
         console.log('Save button clicked!');
         const form = document.getElementById('resep-form') as HTMLFormElement;
@@ -229,7 +309,7 @@ export default function AddResepPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar 
-        title="Tambah Resep" 
+        title={isEditMode ? "Edit Resep" : "Tambah Resep"} 
         showBackButton={true}
         actions={navbarActions}
       />
@@ -239,30 +319,29 @@ export default function AddResepPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ChefHat className="w-5 h-5" />
-              Informasi Resep
+              {isEditMode ? 'Edit Resep' : 'Informasi Resep'}
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {isEditMode && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <span className="font-medium">Mode Edit:</span> Anda sedang mengedit resep yang sudah ada. 
+                  Perubahan akan menggantikan resep sebelumnya.
+                </p>
+              </div>
+            )}
             <form id="resep-form" onSubmit={handleSubmit} className="space-y-6">
               <div className="grid gap-6 sm:grid-cols-1">
                 <div className="space-y-2">
                   <Label htmlFor="produk_jadi_id">Produk Jadi *</Label>
-                  <Select
+                  <ProdukJadiSearchInput
+                    produkJadiList={produkJadiList}
                     value={formData.produk_jadi_id}
                     onValueChange={(value) => handleSelectChange('produk_jadi_id', value)}
+                    placeholder="Cari produk jadi..."
                     required
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Pilih produk jadi" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {produkJadiList.map((produk) => (
-                        <SelectItem key={produk.id} value={produk.id}>
-                          {produk.nama_produk_jadi}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               </div>
 
@@ -289,31 +368,18 @@ export default function AddResepPage() {
                       <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-2">
                           <Label>Bahan Baku *</Label>
-                          <Select
+                          <ResepBahanBakuSearchInput
+                            bahanBakuList={bahanBakuList}
                             value={item.bahan_baku_id}
                             onValueChange={(value) => handleResepItemChange(index, 'bahan_baku_id', value)}
+                            placeholder="Cari bahan baku..."
                             required
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Pilih bahan baku" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {bahanBakuList
-                                .filter(bahan => {
-                                  // Allow current selection or unselected items
-                                  const selectedBahanIds = resepItems
-                                    .filter((_, i) => i !== index)
-                                    .map(item => item.bahan_baku_id)
-                                    .filter(id => id);
-                                  return !selectedBahanIds.includes(bahan.id);
-                                })
-                                .map((bahan) => (
-                                <SelectItem key={bahan.id} value={bahan.id}>
-                                  {bahan.nama_bahan_baku}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            excludeIds={resepItems
+                              .filter((_, i) => i !== index)
+                              .map(item => item.bahan_baku_id)
+                              .filter(id => id)
+                            }
+                          />
                         </div>
 
                         <div className="space-y-2">
@@ -371,7 +437,7 @@ export default function AddResepPage() {
                   className="flex-1 sm:flex-none flex items-center gap-2"
                 >
                   <Save className="w-4 h-4" />
-                  {loading ? 'Menyimpan...' : 'Simpan Resep'}
+                  {loading ? (isEditMode ? 'Memperbarui...' : 'Menyimpan...') : (isEditMode ? 'Perbarui Resep' : 'Simpan Resep')}
                 </Button>
               </div>
             </form>

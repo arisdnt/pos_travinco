@@ -115,9 +115,14 @@ export function Sidebar() {
       {/* Header with Logo and Toggle */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800">
         {!isCollapsed && (
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-            Travinco
-          </h1>
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Travinco
+            </h1>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 -mt-1">
+              Parfum Stoks
+            </p>
+          </div>
         )}
         <Button
           variant="ghost"

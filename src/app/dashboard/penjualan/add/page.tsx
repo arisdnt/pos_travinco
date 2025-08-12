@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ProductSearchInput } from '@/components/ui/product-search-input';
 import { Save, ShoppingCart, Plus, Trash2 } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -293,22 +293,13 @@ function AddPenjualanPage() {
                         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
                           <div className="space-y-2">
                             <Label>Produk *</Label>
-                            <Select
+                            <ProductSearchInput
+                              products={produkJadiList}
                               value={item.produk_jadi_id}
-                              onValueChange={(value) => updateItem(item.id, 'produk_jadi_id', value)}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Pilih produk" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {produkJadiList.map((produk) => (
-                                  <SelectItem key={produk.id} value={produk.id}>
-                                    {produk.nama_produk_jadi} - {formatCurrency(produk.harga_jual)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-
+                              onSelect={(value) => updateItem(item.id, 'produk_jadi_id', value)}
+                              placeholder="Cari produk..."
+                              className="w-full"
+                            />
                           </div>
 
                           <div className="space-y-2">

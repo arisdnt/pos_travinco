@@ -312,114 +312,108 @@ export default function DashboardPage() {
       
       <div className="flex-1 p-4 md:p-6 space-y-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900 dark:to-indigo-900">
         {/* Stats Cards - 2 rows with 3 columns each */}
-        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                Total Bahan Baku
-              </CardTitle>
-              <div className="p-2 bg-blue-500 rounded-lg">
-                <Package className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{dashboardStats.totalBahanBaku.toLocaleString()}</div>
-              <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center mt-1">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                +12% dari bulan lalu
-              </p>
-            </CardContent>
-          </Card>
+        <div className="space-y-4">
+          {/* First Row - Standard Height */}
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-700 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  Total Bahan Baku
+                </CardTitle>
+                <div className="p-2 bg-blue-500 rounded-lg">
+                  <Package className="h-4 w-4 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{dashboardStats.totalBahanBaku.toLocaleString()}</div>
+                <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center mt-1">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  +12% dari bulan lalu
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                Total Produk Jadi
-              </CardTitle>
-              <div className="p-2 bg-purple-500 rounded-lg">
-                <Users className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">{dashboardStats.totalProdukJadi.toLocaleString()}</div>
-              <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center mt-1">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                +8% dari bulan lalu
-              </p>
-            </CardContent>
-          </Card>
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-700 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                  Total Produk Jadi
+                </CardTitle>
+                <div className="p-2 bg-purple-500 rounded-lg">
+                  <Users className="h-4 w-4 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">{dashboardStats.totalProdukJadi.toLocaleString()}</div>
+                <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center mt-1">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  +8% dari bulan lalu
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
-                Penjualan Bulan Ini
-              </CardTitle>
-              <div className="p-2 bg-green-500 rounded-lg">
-                <TrendingUp className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-900 dark:text-green-100">Rp {(dashboardStats.penjualanBulanIni / 1000000).toFixed(1)}M</div>
-              <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                +15% dari bulan lalu
-              </p>
-            </CardContent>
-          </Card>
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
+                  Penjualan Bulan Ini
+                </CardTitle>
+                <div className="p-2 bg-green-500 rounded-lg">
+                  <TrendingUp className="h-4 w-4 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-900 dark:text-green-100">Rp {(dashboardStats.penjualanBulanIni / 1000000).toFixed(1)}M</div>
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  +15% dari bulan lalu
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                Pembelian Bulan Ini
-              </CardTitle>
-              <div className="p-2 bg-orange-500 rounded-lg">
-                <ShoppingCart className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">Rp {(dashboardStats.pembelianBulanIni / 1000000).toFixed(1)}M</div>
-              <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center mt-1">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                +5% dari bulan lalu
-              </p>
-            </CardContent>
-          </Card>
+          {/* Second Row - Reduced Height */}
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-700 shadow-lg hover:shadow-xl transition-all duration-300 h-20">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3">
+                <CardTitle className="text-xs font-medium text-orange-700 dark:text-orange-300">
+                  Pembelian Bulan Ini
+                </CardTitle>
+                <div className="p-1.5 bg-orange-500 rounded-lg">
+                  <ShoppingCart className="h-3 w-3 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="pt-1 pb-2">
+                <div className="text-lg font-bold text-orange-900 dark:text-orange-100">Rp {(dashboardStats.pembelianBulanIni / 1000000).toFixed(1)}M</div>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-red-700 dark:text-red-300">
-                Stok Rendah
-              </CardTitle>
-              <div className="p-2 bg-red-500 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-900 dark:text-red-100">{dashboardStats.stokRendah.toLocaleString()}</div>
-              <p className="text-xs text-red-600 dark:text-red-400 flex items-center mt-1">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Perlu perhatian
-              </p>
-            </CardContent>
-          </Card>
+            <Card className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 border-red-200 dark:border-red-700 shadow-lg hover:shadow-xl transition-all duration-300 h-20">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3">
+                <CardTitle className="text-xs font-medium text-red-700 dark:text-red-300">
+                  Stok Rendah
+                </CardTitle>
+                <div className="p-1.5 bg-red-500 rounded-lg">
+                  <AlertTriangle className="h-3 w-3 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="pt-1 pb-2">
+                <div className="text-lg font-bold text-red-900 dark:text-red-100">{dashboardStats.stokRendah.toLocaleString()}</div>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-indigo-200 dark:border-indigo-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                Produk Terlaris
-              </CardTitle>
-              <div className="p-2 bg-indigo-500 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{dashboardStats.produkTerlaris.toLocaleString()}</div>
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 flex items-center mt-1">
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Produk aktif
-              </p>
-            </CardContent>
-          </Card>
+            <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-indigo-200 dark:border-indigo-700 shadow-lg hover:shadow-xl transition-all duration-300 h-20">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 pt-3">
+                <CardTitle className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                  Produk Terlaris
+                </CardTitle>
+                <div className="p-1.5 bg-indigo-500 rounded-lg">
+                  <CheckCircle className="h-3 w-3 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent className="pt-1 pb-2">
+                <div className="text-lg font-bold text-indigo-900 dark:text-indigo-100">{dashboardStats.produkTerlaris.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
 
