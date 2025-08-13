@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChefHat, Package, Calculator, AlertTriangle, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Navbar } from '@/components/layout/navbar';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { formatNumber, formatCurrency } from '@/lib/utils';
@@ -39,6 +40,9 @@ export default function DetailResepPage() {
   const [loading, setLoading] = useState(true);
   const [resepData, setResepData] = useState<ResepDetail[]>([]);
   const [maxProduksi, setMaxProduksi] = useState<number>(0);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; loading: boolean }>(
+    { open: false, loading: false }
+  );
 
   useEffect(() => {
     if (produkJadiId) {
@@ -105,10 +109,12 @@ export default function DetailResepPage() {
     router.push(`/dashboard/resep/edit/${produkJadiId}`);
   };
 
-  const handleDelete = async () => {
-    const confirmed = window.confirm('Apakah Anda yakin ingin menghapus semua resep untuk produk ini?');
-    if (!confirmed) return;
+  const handleDelete = () => {
+    setDeleteDialog({ open: true, loading: false });
+  };
 
+  const handleConfirmDelete = async () => {
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
       const { error } = await supabase
         .from('resep')
@@ -122,6 +128,8 @@ export default function DetailResepPage() {
     } catch (error: any) {
       console.error('Error deleting resep:', error);
       toast.error(error.message || 'Gagal menghapus resep');
+    } finally {
+      setDeleteDialog(prev => ({ ...prev, loading: false, open: false }));
     }
   };
 
@@ -401,6 +409,18 @@ export default function DetailResepPage() {
         </div>
       </div>
 
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Resep"
+        description={`Apakah Anda yakin ingin menghapus seluruh resep untuk produk ini? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+      />
       {/* Summary Statistics */}
       <Card className="shadow-lg mt-6">
         <CardHeader>

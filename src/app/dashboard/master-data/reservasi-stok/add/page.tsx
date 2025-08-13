@@ -36,6 +36,7 @@ export default function AddReservasiStokPage() {
     catatan: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [exclusiveSupplier, setExclusiveSupplier] = useState<{ id: string; nama: string } | null>(null);
 
   const fetchBahanBakus = async () => {
     const supabase = createClient();
@@ -103,6 +104,40 @@ export default function AddReservasiStokPage() {
     }
   };
 
+  // Enforce supplier eksklusif awareness when bahan baku changes
+  useEffect(() => {
+    const run = async () => {
+      if (!formData.bahan_baku_id) {
+        setExclusiveSupplier(null);
+        return;
+      }
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('bahan_baku')
+          .select('supplier_eksklusif_id, suppliers:supplier_eksklusif_id(nama_supplier)')
+          .eq('id', formData.bahan_baku_id)
+          .single();
+        if (error) {
+          setExclusiveSupplier(null);
+          return;
+        }
+        if (data?.supplier_eksklusif_id) {
+          const nama = (data.suppliers as any)?.nama_supplier || 'Supplier Eksklusif';
+          setExclusiveSupplier({ id: data.supplier_eksklusif_id, nama });
+          // Auto-select enforced supplier
+          setFormData(prev => ({ ...prev, supplier_id: data.supplier_eksklusif_id }));
+        } else {
+          setExclusiveSupplier(null);
+        }
+      } catch {
+        setExclusiveSupplier(null);
+      }
+    };
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.bahan_baku_id]);
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -151,6 +186,12 @@ export default function AddReservasiStokPage() {
         }
       }
 
+      // Client-side guard for supplier eksklusif
+      if (exclusiveSupplier && formData.supplier_id !== exclusiveSupplier.id) {
+        toast.error(`Bahan baku eksklusif. Pilih supplier: ${exclusiveSupplier.nama}.`);
+        return;
+      }
+
       const { error } = await supabase
         .from('reservasi_stok_supplier')
         .insert({
@@ -164,7 +205,12 @@ export default function AddReservasiStokPage() {
 
       if (error) {
         console.error('Error creating reservasi stok:', error);
-        toast.error('Gagal menambah reservasi stok');
+        const msg = (error?.message || '').toLowerCase();
+        if (msg.includes('supplier eksklusif')) {
+          toast.error(`Reservasi ditolak: bahan baku ini eksklusif untuk ${exclusiveSupplier?.nama || 'supplier tertentu'}.`);
+        } else {
+          toast.error('Gagal menambah reservasi stok');
+        }
         return;
       }
 
@@ -295,7 +341,10 @@ export default function AddReservasiStokPage() {
                       <SelectValue placeholder="Pilih supplier" />
                     </SelectTrigger>
                     <SelectContent>
-                      {suppliers.map((supplier) => (
+                      {(exclusiveSupplier
+                        ? suppliers.filter(s => s.id === exclusiveSupplier.id)
+                        : suppliers
+                      ).map((supplier) => (
                         <SelectItem key={supplier.id} value={supplier.id}>
                           <div>
                             <div className="font-medium">{supplier.nama_supplier}</div>
@@ -307,6 +356,13 @@ export default function AddReservasiStokPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {exclusiveSupplier ? (
+                    <p className={`text-sm ${formData.supplier_id === exclusiveSupplier.id ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {formData.supplier_id === exclusiveSupplier.id
+                        ? `✓ Sesuai: bahan baku eksklusif untuk ${exclusiveSupplier.nama}`
+                        : `⚠️ Bahan baku eksklusif untuk ${exclusiveSupplier.nama}. Pilih supplier tersebut.`}
+                    </p>
+                  ) : null}
                   {errors.supplier_id && (
                     <p className="text-sm text-red-600 dark:text-red-400">{errors.supplier_id}</p>
                   )}

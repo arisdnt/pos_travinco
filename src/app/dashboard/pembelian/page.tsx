@@ -15,6 +15,7 @@ import { supabase, getCurrentUser } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { exportToXlsx } from '@/lib/exporter';
 
 
 
@@ -24,6 +25,9 @@ export default function PembelianPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preset, setPreset] = useState<'this_week' | 'last_2_weeks' | 'last_3_weeks' | 'this_month' | 'last_month' | 'custom'>('this_week');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     pembelian: any | null;
@@ -32,7 +36,18 @@ export default function PembelianPage() {
 
   useEffect(() => {
     console.log('🚀 Component mounted, memulai fetch data...');
-    fetchPembelianData();
+    // Initialize default range for this week (Mon -> today)
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = (day === 0 ? 6 : day - 1);
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const startISO = monday.toISOString();
+    const endISO = new Date().toISOString();
+    setStartDate(monday.toISOString().split('T')[0]);
+    setEndDate(new Date().toISOString().split('T')[0]);
+    fetchPembelianData(startISO, endISO);
   }, []);
 
   // Log perubahan data
@@ -43,7 +58,7 @@ export default function PembelianPage() {
     });
   }, [data]);
 
-  const fetchPembelianData = async () => {
+  const fetchPembelianData = async (startISO?: string, endISO?: string) => {
     try {
       console.log('🔄 Memulai fetchPembelianData...');
       setLoading(true);
@@ -60,7 +75,7 @@ export default function PembelianPage() {
       console.log('🔍 Mengambil data pembelian untuk user_id:', user.id);
       
       // First try with user_id filter
-      let { data: pembelianData, error } = await supabase
+      let query = supabase
         .from('pembelian')
         .select(`
           *,
@@ -78,8 +93,12 @@ export default function PembelianPage() {
             unit_dasar:unit_dasar_id(nama_unit)
           )
         `)
-        .eq('user_id', user.id)
-        .order('tanggal', { ascending: false });
+        .eq('user_id', user.id);
+      if (startISO) query = query.gte('tanggal', startISO);
+      if (endISO) query = query.lte('tanggal', endISO);
+      query = query.order('tanggal', { ascending: false });
+
+      let { data: pembelianData, error } = await query;
 
       console.log('📊 Query result untuk user pembelian:', {
         data: pembelianData,
@@ -91,9 +110,7 @@ export default function PembelianPage() {
       if (!error && (!pembelianData || pembelianData.length === 0)) {
         console.log('⚠️ Tidak ada data user, mencoba mengambil data sampel...');
         
-        const { data: sampleData, error: sampleError } = await supabase
-          .from('pembelian')
-          .select(`
+        let sampleQuery = supabase.from('pembelian').select(`
             *,
             bahan_baku:bahan_baku_id(
               nama_bahan_baku,
@@ -108,8 +125,11 @@ export default function PembelianPage() {
               nilai_konversi,
               unit_dasar:unit_dasar_id(nama_unit)
             )
-          `)
-          .order('tanggal', { ascending: false });
+          `);
+        if (startISO) sampleQuery = sampleQuery.gte('tanggal', startISO);
+        if (endISO) sampleQuery = sampleQuery.lte('tanggal', endISO);
+        sampleQuery = sampleQuery.order('tanggal', { ascending: false });
+        const { data: sampleData, error: sampleError } = await sampleQuery;
         
         console.log('📊 Query result untuk sample data:', {
           data: sampleData,
@@ -338,6 +358,98 @@ export default function PembelianPage() {
     []
   )
 
+  const handleExport = async () => {
+    try {
+      const rows = data.map((item) => {
+        const bahan = Array.isArray(item.bahan_baku) ? item.bahan_baku[0] : item.bahan_baku;
+        const supplier = Array.isArray(item.suppliers) ? item.suppliers[0] : item.suppliers;
+        const kemasan = Array.isArray(item.kemasan) ? item.kemasan[0] : item.kemasan;
+        const unitDasar = kemasan?.unit_dasar?.nama_unit || bahan?.unit_dasar?.nama_unit || 'unit';
+        const jumlahDisplay = kemasan
+          ? `${(item.jumlah / (kemasan.nilai_konversi || 1)).toLocaleString('id-ID')} ${kemasan.nama_kemasan} (= ${item.jumlah.toLocaleString('id-ID')} ${unitDasar})`
+          : `${item.jumlah.toLocaleString('id-ID')} ${unitDasar}`;
+        return {
+          'Bahan Baku': bahan?.nama_bahan_baku || '-',
+          'Asal Barang': item.asal_barang === 'reservasi' ? 'Dari Reservasi' : 'Pembelian Langsung',
+          Supplier: supplier?.nama_supplier || '-',
+          Jumlah: jumlahDisplay,
+          Harga: item.harga_beli || 0,
+          Tanggal: new Date(item.tanggal).toLocaleString('id-ID'),
+          Catatan: item.catatan || '-',
+        };
+      });
+
+      await exportToXlsx('pembelian', {
+        sheetName: 'Pembelian',
+        columns: [
+          { header: 'Bahan Baku', key: 'Bahan Baku', width: 28 },
+          { header: 'Asal Barang', key: 'Asal Barang', width: 18 },
+          { header: 'Supplier', key: 'Supplier', width: 26 },
+          { header: 'Jumlah', key: 'Jumlah', width: 28 },
+          { header: 'Harga', key: 'Harga', width: 16 },
+          { header: 'Tanggal', key: 'Tanggal', width: 22 },
+          { header: 'Catatan', key: 'Catatan', width: 36 },
+        ],
+        rows,
+      });
+      toast.success('Export pembelian berhasil');
+    } catch (e) {
+      console.error('Export pembelian gagal:', e);
+      toast.error('Export gagal');
+    }
+  };
+
+  const applyPreset = () => {
+    let start: Date | null = null;
+    let end: Date | null = new Date();
+    const now = new Date();
+    switch (preset) {
+      case 'this_week': {
+        const day = now.getDay();
+        const diffToMonday = (day === 0 ? 6 : day - 1);
+        start = new Date(now);
+        start.setDate(now.getDate() - diffToMonday);
+        break;
+      }
+      case 'last_2_weeks': {
+        start = new Date(now);
+        start.setDate(now.getDate() - 14);
+        break;
+      }
+      case 'last_3_weeks': {
+        start = new Date(now);
+        start.setDate(now.getDate() - 21);
+        break;
+      }
+      case 'this_month': {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      }
+      case 'last_month': {
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        break;
+      }
+      case 'custom': {
+        // Use startDate and endDate from state
+        break;
+      }
+    }
+    if (preset !== 'custom' && start) {
+      setStartDate(start.toISOString().split('T')[0]);
+      setEndDate(new Date().toISOString().split('T')[0]);
+      fetchPembelianData(start.toISOString(), end?.toISOString());
+    } else if (preset === 'custom' && startDate && endDate) {
+      const s = new Date(startDate);
+      s.setHours(0, 0, 0, 0);
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999);
+      fetchPembelianData(s.toISOString(), e.toISOString());
+    } else {
+      toast.info('Pilih tanggal mulai dan akhir untuk rentang kustom');
+    }
+  };
+
   const navbarActions = useMemo(() => [
     {
       label: "Tambah Pembelian",
@@ -345,11 +457,7 @@ export default function PembelianPage() {
       icon: Plus,
       variant: "default" as const
     },
-    {
-      label: "Download",
-      onClick: () => console.log('Download'),
-      variant: "outline" as const
-    },
+    { label: "Export", onClick: handleExport, variant: "outline" as const },
     {
       label: "Filter",
       onClick: () => console.log('Filter'),
@@ -411,6 +519,38 @@ export default function PembelianPage() {
               searchKey="bahan_baku"
               searchPlaceholder="Cari bahan baku..."
               hideColumnToggle={true}
+              extraControls={(
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={preset}
+                    onChange={(e) => setPreset(e.target.value as any)}
+                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
+                    title="Preset waktu"
+                  >
+                    <option value="this_week">Minggu ini</option>
+                    <option value="last_2_weeks">2 minggu terakhir</option>
+                    <option value="last_3_weeks">3 minggu terakhir</option>
+                    <option value="this_month">Bulan ini</option>
+                    <option value="last_month">Bulan lalu</option>
+                    <option value="custom">Rentang tanggal</option>
+                  </select>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
+                    title="Tanggal mulai"
+                  />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
+                    title="Tanggal selesai"
+                  />
+                  <Button variant="outline" size="sm" onClick={applyPreset}>Terapkan</Button>
+                </div>
+              )}
             />
           </CardContent>
         </Card>

@@ -19,6 +19,7 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { createClient } from '@/lib/supabase/client'
 import { toast } from "sonner"
 import type { Kategori } from '@/types/master-data'
+import { exportToXlsx } from '@/lib/exporter'
 
 export default function KategoriPage() {
   const router = useRouter();
@@ -206,6 +207,29 @@ export default function KategoriPage() {
     [router, handleDelete]
   )
 
+  const handleExport = async () => {
+    try {
+      const rows = data.map((item) => ({
+        'Nama Kategori': item.nama_kategori,
+        Deskripsi: item.deskripsi || '-',
+        Ditambahkan: new Date(item.created_at).toLocaleString('id-ID')
+      }));
+      await exportToXlsx('kategori', {
+        sheetName: 'Kategori',
+        columns: [
+          { header: 'Nama Kategori', key: 'Nama Kategori', width: 28 },
+          { header: 'Deskripsi', key: 'Deskripsi', width: 42 },
+          { header: 'Ditambahkan', key: 'Ditambahkan', width: 22 },
+        ],
+        rows,
+      });
+      toast.success('Export berhasil');
+    } catch (e) {
+      console.error('Export kategori gagal:', e);
+      toast.error('Export gagal');
+    }
+  };
+
   const navbarActions = [
     {
       label: "Tambah Kategori",
@@ -213,14 +237,7 @@ export default function KategoriPage() {
       icon: Plus,
       variant: "default" as const
     },
-    {
-      label: "Export",
-      onClick: () => {
-        // TODO: Implement export functionality
-        console.log("Export data")
-      },
-      variant: "outline" as const
-    },
+    { label: "Export", onClick: handleExport, variant: "outline" as const },
     {
       label: "Filter Lanjutan",
       onClick: () => {

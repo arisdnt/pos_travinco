@@ -13,6 +13,7 @@ import { Navbar } from '@/components/layout/navbar';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Plus, Ruler, Package, Eye, Edit, Trash2, Filter, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToXlsx } from '@/lib/exporter';
 import { formatDate } from '@/lib/utils';
 import type { UnitDasar, Kemasan } from '@/types/master-data';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -381,6 +382,41 @@ export default function KonfigurasiUnitPage() {
   ], [router, kemasanDeleting]);
 
   // Define navbar actions for Unit Dasar
+  const handleExportUnits = async () => {
+    try {
+      const rows = unitData.map((u) => ({ 'Nama Unit': u.nama_unit, Deskripsi: u.deskripsi || '-' }));
+      await exportToXlsx('unit_dasar', {
+        sheetName: 'Unit Dasar',
+        columns: [
+          { header: 'Nama Unit', key: 'Nama Unit', width: 24 },
+          { header: 'Deskripsi', key: 'Deskripsi', width: 42 },
+        ],
+        rows,
+      });
+      toast.success('Export Unit Dasar berhasil');
+    } catch (e) { toast.error('Export gagal'); }
+  };
+
+  const handleExportKemasans = async () => {
+    try {
+      const rows = kemasanData.map((k) => ({
+        'Nama Kemasan': k.nama_kemasan,
+        'Nilai Konversi': k.nilai_konversi,
+        'Unit Dasar': (Array.isArray((k as any).unit_dasar) ? (k as any).unit_dasar[0]?.nama_unit : (k as any).unit_dasar?.nama_unit) || '-',
+      }));
+      await exportToXlsx('kemasan', {
+        sheetName: 'Kemasan',
+        columns: [
+          { header: 'Nama Kemasan', key: 'Nama Kemasan', width: 24 },
+          { header: 'Nilai Konversi', key: 'Nilai Konversi', width: 18 },
+          { header: 'Unit Dasar', key: 'Unit Dasar', width: 18 },
+        ],
+        rows,
+      });
+      toast.success('Export Kemasan berhasil');
+    } catch (e) { toast.error('Export gagal'); }
+  };
+
   const unitNavbarActions = useMemo(() => [
     {
       label: 'Tambah Unit Dasar',
@@ -388,15 +424,7 @@ export default function KonfigurasiUnitPage() {
       icon: Plus,
       variant: 'default' as const
     },
-    {
-      label: 'Export Data',
-      onClick: () => {
-        // TODO: Implement export functionality
-        toast.info('Fitur export akan segera tersedia');
-      },
-      icon: BarChart3,
-      variant: 'outline' as const
-    },
+    { label: 'Export Unit', onClick: handleExportUnits, icon: BarChart3, variant: 'outline' as const },
     {
       label: 'Filter Lanjutan',
       onClick: () => {
@@ -416,15 +444,7 @@ export default function KonfigurasiUnitPage() {
       icon: Plus,
       variant: 'default' as const
     },
-    {
-      label: 'Export Data',
-      onClick: () => {
-        // TODO: Implement export functionality
-        toast.info('Fitur export akan segera tersedia');
-      },
-      icon: BarChart3,
-      variant: 'outline' as const
-    },
+    { label: 'Export Kemasan', onClick: handleExportKemasans, icon: BarChart3, variant: 'outline' as const },
     {
       label: 'Filter Lanjutan',
       onClick: () => {

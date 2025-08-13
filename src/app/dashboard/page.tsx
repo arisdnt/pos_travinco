@@ -371,8 +371,8 @@ export default function DashboardPage() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-white p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-white dark:bg-gray-900 p-6">
+      <div className="w-full space-y-8">
 
         {/* Key Metrics - Simplified */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -407,7 +407,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Charts Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-900/80 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
           <DashboardCharts 
             topProducts={topProducts}
             stockData={stockData}
@@ -417,8 +417,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Reports Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <DashboardReports 
+        <div className="bg-white dark:bg-gray-900/80 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-6">
+        <DashboardReports 
             laporanPenjualan={laporanPenjualan}
             laporanPemakaianBahan={laporanPemakaianBahan}
             stokTersedia={stokTersedia}

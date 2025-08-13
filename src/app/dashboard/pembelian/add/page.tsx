@@ -56,6 +56,7 @@ function AddPembelianPage() {
   const [kemasanList, setKemasanList] = useState<Kemasan[]>([]);
   const [reservasiList, setReservasiList] = useState<ReservasiStok[]>([]);
   const [selectedBahan, setSelectedBahan] = useState<BahanBaku | null>(null);
+  const [exclusiveSupplier, setExclusiveSupplier] = useState<{ id: string; nama: string } | null>(null);
   const [formData, setFormData] = useState({
     bahan_baku_id: '',
     supplier_id: '',
@@ -82,9 +83,27 @@ function AddPembelianPage() {
       fetchKemasan(formData.bahan_baku_id);
       const selected = bahanBakuList.find(b => b.id === formData.bahan_baku_id);
       setSelectedBahan(selected || null);
+      // Fetch supplier eksklusif info for awareness
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('bahan_baku')
+            .select('supplier_eksklusif_id, suppliers:supplier_eksklusif_id(nama_supplier)')
+            .eq('id', formData.bahan_baku_id)
+            .single();
+          if (data?.supplier_eksklusif_id) {
+            setExclusiveSupplier({ id: data.supplier_eksklusif_id, nama: (data.suppliers as any)?.nama_supplier || 'Supplier Eksklusif' });
+          } else {
+            setExclusiveSupplier(null);
+          }
+        } catch {
+          setExclusiveSupplier(null);
+        }
+      })();
     } else {
       setSelectedBahan(null);
       setKemasanList([]);
+      setExclusiveSupplier(null);
     }
   }, [formData.bahan_baku_id, bahanBakuList]);
 
@@ -451,7 +470,15 @@ function AddPembelianPage() {
       router.push('/dashboard/pembelian');
     } catch (error: any) {
       console.error('Error adding pembelian:', error);
-      toast.error(error.message || 'Gagal menambahkan pembelian');
+      const msg = (error?.message || '').toLowerCase();
+      if (msg.includes('supplier eksklusif')) {
+        const info = exclusiveSupplier?.nama ? ` Hanya dari: ${exclusiveSupplier.nama}.` : '';
+        toast.error(`Transaksi dibatalkan: bahan baku ini memiliki supplier eksklusif.${info} Pilih supplier yang sesuai.`);
+      } else if (msg.includes('kemasan tidak sesuai')) {
+        toast.error('Transaksi dibatalkan: kemasan pembelian tidak sesuai dengan kemasan pada reservasi.');
+      } else {
+        toast.error(error.message || 'Gagal menambahkan pembelian');
+      }
     } finally {
       setLoading(false);
     }
@@ -520,6 +547,17 @@ function AddPembelianPage() {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white border-b pb-2">
                     Pilih Item
                   </h3>
+                  {exclusiveSupplier && (
+                    <div className={`p-3 rounded-md border ${formData.asal_barang === 'reservasi' && formData.supplier_id && formData.supplier_id !== exclusiveSupplier.id ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <p className={`text-sm ${formData.asal_barang === 'reservasi' && formData.supplier_id && formData.supplier_id !== exclusiveSupplier.id ? 'text-red-700' : 'text-amber-700'}`}>
+                        {formData.asal_barang === 'reservasi' && formData.supplier_id
+                          ? (formData.supplier_id === exclusiveSupplier.id
+                              ? `✓ Supplier sesuai aturan eksklusif: ${exclusiveSupplier.nama}`
+                              : `Bahan ini memiliki supplier eksklusif: ${exclusiveSupplier.nama}. Pilih supplier tersebut agar pembelian dapat diproses.`)
+                          : `Bahan ini memiliki supplier eksklusif: ${exclusiveSupplier.nama}.`}
+                      </p>
+                    </div>
+                  )}
                   
                   {formData.asal_barang === 'reservasi' && (
                     <div className="space-y-2">
@@ -543,9 +581,16 @@ function AddPembelianPage() {
                           </option>
                         ))}
                       </select>
-                      {formData.supplier_id && (
+                      {formData.supplier_id && !exclusiveSupplier && (
                         <p className="text-sm text-green-600 dark:text-green-400">
                           ✓ Supplier dipilih. Silakan pilih bahan baku yang tersedia.
+                        </p>
+                      )}
+                      {formData.supplier_id && exclusiveSupplier && (
+                        <p className={`text-sm ${formData.supplier_id === exclusiveSupplier.id ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {formData.supplier_id === exclusiveSupplier.id
+                            ? '✓ Supplier sesuai dengan aturan eksklusif'
+                            : '⚠️ Supplier tidak sesuai aturan eksklusif untuk bahan yang dipilih'}
                         </p>
                       )}
                     </div>

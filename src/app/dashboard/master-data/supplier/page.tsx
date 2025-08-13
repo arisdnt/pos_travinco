@@ -19,6 +19,7 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { createClient } from '@/lib/supabase/client'
 import { toast } from "sonner"
 import type { Supplier } from '@/types/master-data'
+import { exportToXlsx } from '@/lib/exporter'
 
 export default function SupplierPage() {
   const router = useRouter();
@@ -195,6 +196,31 @@ export default function SupplierPage() {
     [router, handleDelete]
   )
 
+  const handleExport = async () => {
+    try {
+      const rows = data.map((item) => ({
+        Supplier: item.nama_supplier,
+        Kontak: item.kontak || '-',
+        Alamat: item.alamat || '-',
+        Ditambahkan: new Date(item.created_at).toLocaleString('id-ID')
+      }));
+      await exportToXlsx('supplier', {
+        sheetName: 'Supplier',
+        columns: [
+          { header: 'Supplier', key: 'Supplier', width: 26 },
+          { header: 'Kontak', key: 'Kontak', width: 22 },
+          { header: 'Alamat', key: 'Alamat', width: 42 },
+          { header: 'Ditambahkan', key: 'Ditambahkan', width: 22 },
+        ],
+        rows,
+      });
+      toast.success('Export berhasil');
+    } catch (e) {
+      console.error('Export supplier gagal:', e);
+      toast.error('Export gagal');
+    }
+  };
+
   const navbarActions = [
     {
       label: "Tambah Supplier",
@@ -202,14 +228,7 @@ export default function SupplierPage() {
       icon: Plus,
       variant: "default" as const
     },
-    {
-      label: "Export",
-      onClick: () => {
-        // TODO: Implement export functionality
-        console.log("Export data")
-      },
-      variant: "outline" as const
-    },
+    { label: "Export", onClick: handleExport, variant: "outline" as const },
     {
       label: "Filter Lanjutan",
       onClick: () => {

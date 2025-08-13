@@ -18,6 +18,7 @@ import { StatCard, StatCardVariants } from "@/components/ui/stat-card"
 import { supabase, getBahanBaku, getCurrentUser } from "@/lib/supabase"
 import { toast } from "sonner"
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { exportToXlsx } from '@/lib/exporter'
 
 // Data akan diambil dari Supabase sesuai skema database
 
@@ -244,6 +245,35 @@ export default function BahanBakuPage() {
     [router, handleDelete]
   )
 
+  const handleExport = async () => {
+    try {
+      const rows = data.map((item) => ({
+        Nama: item.nama_bahan_baku,
+        Kategori: item.kategori?.nama_kategori || '-',
+        Unit: item.unit_dasar?.nama_unit || '-',
+        'Supplier Eksklusif': item.supplier_eksklusif?.nama_supplier || 'Tidak',
+        Stok: item.stok,
+        Ditambahkan: new Date(item.created_at).toLocaleString('id-ID'),
+      }));
+      await exportToXlsx('bahan_baku', {
+        sheetName: 'Bahan Baku',
+        columns: [
+          { header: 'Nama', key: 'Nama', width: 32 },
+          { header: 'Kategori', key: 'Kategori', width: 22 },
+          { header: 'Unit', key: 'Unit', width: 14 },
+          { header: 'Supplier Eksklusif', key: 'Supplier Eksklusif', width: 26 },
+          { header: 'Stok', key: 'Stok', width: 12 },
+          { header: 'Ditambahkan', key: 'Ditambahkan', width: 22 },
+        ],
+        rows,
+      });
+      toast.success('Export berhasil');
+    } catch (e) {
+      console.error('Export bahan baku gagal:', e);
+      toast.error('Export gagal');
+    }
+  };
+
   const navbarActions = [
     {
       label: "Tambah Bahan Baku",
@@ -251,14 +281,7 @@ export default function BahanBakuPage() {
       icon: Plus,
       variant: "default" as const
     },
-    {
-      label: "Export",
-      onClick: () => {
-        // TODO: Implement export functionality
-        console.log("Export data")
-      },
-      variant: "outline" as const
-    },
+    { label: "Export", onClick: handleExport, variant: "outline" as const },
     {
       label: "Filter Lanjutan",
       onClick: () => {

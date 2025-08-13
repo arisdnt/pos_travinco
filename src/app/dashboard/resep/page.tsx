@@ -42,7 +42,7 @@ export default function ResepPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean
-    resep: any | null
+    resep: { produk_jadi_id: string; nama_produk_jadi?: string } | null
     loading: boolean
   }>({
     open: false,
@@ -115,16 +115,25 @@ export default function ResepPage() {
     }
   };
 
-  const handleDelete = useCallback((produkJadiId: string) => {
-    const resep = data.find(d => d.produk_jadi_id === produkJadiId);
-    if (!resep) return;
-    
+  const handleAdd = useCallback(() => {
+    router.push('/dashboard/resep/add');
+  }, [router]);
+
+  const handleEdit = useCallback((id: string) => {
+    router.push(`/dashboard/resep/edit/${id}`);
+  }, [router]);
+
+  const handleDetail = useCallback((id: string) => {
+    router.push(`/dashboard/resep/detail/${id}`);
+  }, [router]);
+
+  const handleDelete = useCallback((payload: { produk_jadi_id: string; nama_produk_jadi?: string }) => {
     setDeleteDialog({
       open: true,
-      resep: resep,
+      resep: { produk_jadi_id: payload.produk_jadi_id, nama_produk_jadi: payload.nama_produk_jadi },
       loading: false
     });
-  }, [data]);
+  }, []);
 
   const handleConfirmDelete = async () => {
     if (!deleteDialog.resep) return;
@@ -234,7 +243,7 @@ export default function ResepPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDelete(row.original.produk_jadi_id)}
+              onClick={() => handleDelete({ produk_jadi_id: row.original.produk_jadi_id, nama_produk_jadi: row.original.nama_produk_jadi })}
               className="text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -244,20 +253,8 @@ export default function ResepPage() {
         ),
       },
     ],
-    []
+    [handleDetail, handleEdit, handleDelete]
   )
-
-  const handleAdd = () => {
-    router.push('/dashboard/resep/add');
-  };
-
-  const handleEdit = (id: string) => {
-    router.push(`/dashboard/resep/edit/${id}`);
-  };
-
-  const handleDetail = (id: string) => {
-    router.push(`/dashboard/resep/detail/${id}`);
-  };
 
   const navbarActions = useMemo(() => [
     {
@@ -276,7 +273,7 @@ export default function ResepPage() {
       onClick: () => console.log('Filter'),
       variant: "outline" as const
     }
-  ], []);
+  ], [handleAdd]);
 
   if (loading) {
     return (

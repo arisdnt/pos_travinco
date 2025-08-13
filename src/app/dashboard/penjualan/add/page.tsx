@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,20 @@ interface PenjualanItem {
   total_harga: number;
 }
 
+type StockShortage = {
+  nama: string;
+  dibutuhkan: number;
+  tersedia: number;
+  unit: string;
+  kurang: number;
+};
+
+type StockStatus = {
+  ok: boolean;
+  max: number;
+  shortages: StockShortage[];
+};
+
 function AddPenjualanPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -39,6 +53,8 @@ function AddPenjualanPage() {
     harga_satuan: 0,
     total_harga: 0
   }]);
+  const [stockStatus, setStockStatus] = useState<Record<string, StockStatus>>({});
+  const debounceTimers = useRef<Record<string, any>>({});
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
     catatan: ''
@@ -99,9 +115,88 @@ function AddPenjualanPage() {
           updatedItem.total_harga = updatedItem.harga_satuan * (value as number);
         }
         
+        // Debounced per-item stock check for immediate user feedback
+        if (debounceTimers.current[id]) clearTimeout(debounceTimers.current[id]);
+        debounceTimers.current[id] = setTimeout(() => {
+          checkItemStock(updatedItem);
+        }, 300);
+
         return updatedItem;
       }
       return item;
+    }));
+  };
+
+  const checkItemStock = async (item: PenjualanItem) => {
+    if (!item.produk_jadi_id || !item.jumlah || item.jumlah <= 0) {
+      setStockStatus(prev => {
+        const { [item.id]: _, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
+
+    // First: quick availability check
+    const { data: stokCheck, error: stokError } = await supabase
+      .rpc('check_stok_tersedia', {
+        produk_id: item.produk_jadi_id,
+        jumlah_jual: item.jumlah
+      });
+
+    if (stokError) {
+      // Keep silent in UI; submission will surface error. Clear any previous status.
+      setStockStatus(prev => ({ ...prev, [item.id]: { ok: true, max: 0, shortages: [] } }));
+      return;
+    }
+
+    if (stokCheck) {
+      // Sufficient stock
+      // Optionally show max producible for awareness
+      const { data: maxProd } = await supabase.rpc('hitung_max_produksi', { produk_id: item.produk_jadi_id });
+      setStockStatus(prev => ({ ...prev, [item.id]: { ok: true, max: Number(maxProd ?? 0), shortages: [] } }));
+      return;
+    }
+
+    // Not enough stock: fetch detailed shortages and max producible
+    const [{ data: detailStok }, { data: maxProd }] = await Promise.all([
+      supabase
+        .from('resep')
+        .select(`
+          jumlah_dibutuhkan,
+          bahan_baku (
+            nama_bahan_baku,
+            stok,
+            unit_dasar (
+              nama_unit
+            )
+          )
+        `)
+        .eq('produk_jadi_id', item.produk_jadi_id),
+      supabase.rpc('hitung_max_produksi', { produk_id: item.produk_jadi_id })
+    ]);
+
+    const shortages: StockShortage[] = [];
+    if (detailStok) {
+      for (const resep of detailStok as any[]) {
+        const stokDibutuhkan = resep.jumlah_dibutuhkan * item.jumlah;
+        const bahanBaku = Array.isArray(resep.bahan_baku) ? resep.bahan_baku[0] : resep.bahan_baku;
+        const unitDasar = Array.isArray(bahanBaku?.unit_dasar) ? bahanBaku.unit_dasar[0] : bahanBaku?.unit_dasar;
+        const stokTersedia = bahanBaku?.stok || 0;
+        if (stokTersedia < stokDibutuhkan) {
+          shortages.push({
+            nama: bahanBaku?.nama_bahan_baku || 'Unknown',
+            dibutuhkan: stokDibutuhkan,
+            tersedia: stokTersedia,
+            unit: unitDasar?.nama_unit || 'unit',
+            kurang: stokDibutuhkan - stokTersedia
+          });
+        }
+      }
+    }
+
+    setStockStatus(prev => ({
+      ...prev,
+      [item.id]: { ok: false, max: Number(maxProd ?? 0), shortages }
     }));
   };
 
@@ -173,6 +268,10 @@ function AddPenjualanPage() {
             `)
             .eq('produk_jadi_id', item.produk_jadi_id);
 
+          // Also compute maximum producible units to guide user
+          const { data: maxProd, error: maxErr } = await supabase
+            .rpc('hitung_max_produksi', { produk_id: item.produk_jadi_id });
+
           if (!detailError && detailStok) {
             const bahanKurang = [];
             for (const resep of detailStok) {
@@ -198,7 +297,7 @@ function AddPenjualanPage() {
               ).join('\n');
               
               toast.error(
-                `❌ Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi} (${item.jumlah} unit):\n\n${detailMessage}\n\n💡 Silakan periksa dan tambah stok bahan baku yang diperlukan.`,
+                `❌ Stok bahan baku tidak mencukupi untuk produksi ${produk?.nama_produk_jadi} (${item.jumlah} unit):\n\n${detailMessage}\n\n🔎 Maks produksi saat ini: ${Number(maxProd ?? 0)} unit.\n💡 Kurangi jumlah atau tambah stok bahan baku yang diperlukan.`,
                 {
                   duration: 8000,
                   style: {
@@ -247,7 +346,12 @@ function AddPenjualanPage() {
       router.push('/dashboard/penjualan');
     } catch (error: any) {
       console.error('Error adding penjualan:', error);
-      toast.error(error.message || 'Gagal menambahkan penjualan');
+      const msg: string = error?.message || '';
+      if (msg.toLowerCase().includes('stok') || msg.toLowerCase().includes('tidak mencukupi')) {
+        toast.error('Transaksi dibatalkan: stok bahan baku tidak mencukupi. Kurangi jumlah atau tambahkan stok terlebih dahulu.');
+      } else {
+        toast.error(msg || 'Gagal menambahkan penjualan');
+      }
     } finally {
       setLoading(false);
     }
@@ -394,6 +498,37 @@ function AddPenjualanPage() {
                             </div>
                           </div>
                         </div>
+
+                        {/* Real-time stock status */}
+                        {stockStatus[item.id] && (
+                          <div className="mt-3">
+                            {stockStatus[item.id].ok ? (
+                              stockStatus[item.id].max > 0 && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Maks produksi saat ini: {stockStatus[item.id].max} unit
+                                </p>
+                              )
+                            ) : (
+                              <div className="p-3 rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30">
+                                <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-1">
+                                  Stok bahan baku tidak mencukupi untuk item ini.
+                                </p>
+                                {stockStatus[item.id].shortages.length > 0 && (
+                                  <ul className="list-disc ml-5 text-xs text-red-700 dark:text-red-300">
+                                    {stockStatus[item.id].shortages.map((b, i) => (
+                                      <li key={i}>
+                                        {b.nama}: butuh {b.dibutuhkan} {b.unit}, tersedia {b.tersedia} {b.unit} (kurang {b.kurang} {b.unit})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                                  Maks produksi saat ini: {stockStatus[item.id].max} unit. Kurangi jumlah atau tambah stok.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );

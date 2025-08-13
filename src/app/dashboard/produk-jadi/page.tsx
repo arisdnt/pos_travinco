@@ -15,6 +15,7 @@ import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { supabase, getProdukJadi, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { exportToXlsx } from '@/lib/exporter';
 
 interface ProdukJadi {
   id: string
@@ -217,6 +218,31 @@ export default function ProdukJadiPage() {
     [router, handleEdit, handleDelete]
   );
 
+  const handleExport = async () => {
+    try {
+      const rows = data.map((item) => ({
+        Produk: item.nama_produk_jadi,
+        Stok: item.stok,
+        'Harga Jual': item.harga_jual,
+        'Tanggal Dibuat': new Date(item.created_at).toLocaleString('id-ID'),
+      }));
+      await exportToXlsx('produk_jadi', {
+        sheetName: 'Produk Jadi',
+        columns: [
+          { header: 'Produk', key: 'Produk', width: 32 },
+          { header: 'Stok', key: 'Stok', width: 12 },
+          { header: 'Harga Jual', key: 'Harga Jual', width: 16 },
+          { header: 'Tanggal Dibuat', key: 'Tanggal Dibuat', width: 22 },
+        ],
+        rows,
+      });
+      toast.success('Export berhasil');
+    } catch (e) {
+      console.error('Export produk jadi gagal:', e);
+      toast.error('Export gagal');
+    }
+  };
+
   const navbarActions = useMemo(() => [
     {
       label: "Tambah Produk Jadi",
@@ -224,14 +250,7 @@ export default function ProdukJadiPage() {
       icon: Plus,
       variant: "default" as const
     },
-    {
-      label: "Export",
-      onClick: () => {
-        // TODO: Implement export functionality
-        console.log("Export data");
-      },
-      variant: "outline" as const
-    },
+    { label: "Export", onClick: handleExport, variant: "outline" as const },
     {
       label: "Filter Lanjutan",
       onClick: () => {
