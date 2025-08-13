@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Navbar } from "@/components/layout/navbar"
 import { StatCard, StatCardVariants } from "@/components/ui/stat-card"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { createClient } from '@/lib/supabase/client'
 import { toast } from "sonner"
 import type { Kategori } from '@/types/master-data'
@@ -28,6 +29,11 @@ export default function KategoriPage() {
     withDescription: 0,
     recentlyAdded: 0,
     mostUsed: 0
+  });
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    kategori: null as Kategori | null,
+    loading: false
   });
 
   useEffect(() => {
@@ -70,28 +76,34 @@ export default function KategoriPage() {
 
   const handleAdd = () => {
     router.push('/dashboard/master-data/kategori/add');
-  }
+  };
 
   const handleEdit = (item: Kategori) => {
     router.push(`/dashboard/master-data/kategori/${item.id}/edit`);
-  }
+  };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const item = data.find(d => d.id === id);
     if (!item) return;
     
-    const confirmed = window.confirm(
-      `Apakah Anda yakin ingin menghapus kategori "${item.nama_kategori}"?`
-    );
-    
-    if (!confirmed) return;
+    setDeleteDialog({
+      open: true,
+      kategori: item,
+      loading: false
+    });
+  }, [data]);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.kategori) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from('kategori')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.kategori.id);
 
       if (error) {
         if (error.code === '23503') {
@@ -103,16 +115,17 @@ export default function KategoriPage() {
       }
 
       toast.success('Kategori berhasil dihapus!');
+      setDeleteDialog({ open: false, kategori: null, loading: false });
       fetchData(); // Refresh data
     } catch (error: any) {
       console.error('Error deleting kategori:', error);
       toast.error(error.message || 'Gagal menghapus kategori');
+    } finally {
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  }
+  };
 
-  // Stats calculations moved to fetchData function
-
-  const columns = useMemo<ColumnDef<Kategori>[]>(
+  const columns: ColumnDef<Kategori>[] = useMemo(
     () => [
       {
         accessorKey: "nama_kategori",
@@ -167,19 +180,19 @@ export default function KategoriPage() {
           return (
             <ActionDropdown>
               <DropdownMenuItem 
-                onClick={() => router.push(`/dashboard/master-data/kategori/${item.id}`)}
+                onSelect={() => router.push(`/dashboard/master-data/kategori/${item.id}`)}
               >
                 <Eye className="mr-2 h-4 w-4" />
                 Lihat Detail
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => router.push(`/dashboard/master-data/kategori/${item.id}/edit`)}
+                onSelect={() => router.push(`/dashboard/master-data/kategori/${item.id}/edit`)}
               >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => handleDelete(item.id)}
+                onSelect={() => handleDelete(item.id)}
                 className="text-red-600"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -190,7 +203,7 @@ export default function KategoriPage() {
         },
       },
     ],
-    [router]
+    [router, handleDelete]
   )
 
   const navbarActions = [
@@ -220,6 +233,7 @@ export default function KategoriPage() {
   ]
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <Navbar 
         title="Kategori" 
@@ -272,8 +286,21 @@ export default function KategoriPage() {
         </CardContent>
       </Card>
 
-
       </div>
     </div>
+
+    {/* Confirmation Dialog */}
+    <ConfirmationDialog
+      open={deleteDialog.open}
+      onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+      title="Hapus Kategori"
+      description={`Apakah Anda yakin ingin menghapus kategori "${deleteDialog.kategori?.nama_kategori}"? Tindakan ini tidak dapat dibatalkan.`}
+      confirmText="Hapus"
+      cancelText="Batal"
+      variant="destructive"
+      onConfirm={handleConfirmDelete}
+      loading={deleteDialog.loading}
+    />
+    </>
   )
 }

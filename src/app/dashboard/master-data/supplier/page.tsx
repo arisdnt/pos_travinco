@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Navbar } from "@/components/layout/navbar"
 import { StatCard, StatCardVariants } from "@/components/ui/stat-card"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { createClient } from '@/lib/supabase/client'
 import { toast } from "sonner"
 import type { Supplier } from '@/types/master-data'
@@ -29,12 +30,13 @@ export default function SupplierPage() {
     withAddress: 0,
     recentlyAdded: 0
   });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    supplier: Supplier | null;
+    loading: boolean;
+  }>({ open: false, supplier: null, loading: false });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const supabase = createClient();
       const { data: suppliers, error } = await supabase
@@ -66,7 +68,11 @@ export default function SupplierPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [])
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleAdd = () => {
     router.push('/dashboard/master-data/supplier/add');
@@ -76,32 +82,36 @@ export default function SupplierPage() {
     router.push(`/dashboard/master-data/supplier/${item.id}/edit`);
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const item = data.find(d => d.id === id);
     if (!item) return;
     
-    const confirmed = window.confirm(
-      `Apakah Anda yakin ingin menghapus supplier "${item.nama_supplier}"?`
-    );
-    
-    if (!confirmed) return;
+    setDeleteDialog({ open: true, supplier: item, loading: false });
+  }, [data])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.supplier) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from('suppliers')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.supplier.id);
 
       if (error) throw error;
 
       toast.success('Supplier berhasil dihapus!');
+      setDeleteDialog({ open: false, supplier: null, loading: false });
       fetchData(); // Refresh data
     } catch (error: any) {
       console.error('Error deleting supplier:', error);
       toast.error(error.message || 'Gagal menghapus supplier');
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  }
+  }, [deleteDialog.supplier, fetchData])
 
   // Stats calculations moved to fetchData function
 
@@ -145,7 +155,7 @@ export default function SupplierPage() {
           <SortableHeader column={column}>Ditambahkan</SortableHeader>
         ),
         cell: ({ row }) => (
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 dark:text-gray-300">
             {formatDateTime(row.getValue("created_at"))}
           </div>
         ),
@@ -159,19 +169,19 @@ export default function SupplierPage() {
           return (
             <ActionDropdown>
               <DropdownMenuItem 
-                onClick={() => router.push(`/dashboard/master-data/supplier/${item.id}`)}
+                onSelect={() => router.push(`/dashboard/master-data/supplier/${item.id}`)}
               >
                 <Eye className="mr-2 h-4 w-4" />
                 Lihat Detail
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => router.push(`/dashboard/master-data/supplier/${item.id}/edit`)}
+                onSelect={() => router.push(`/dashboard/master-data/supplier/${item.id}/edit`)}
               >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => handleDelete(item.id)}
+                onSelect={() => handleDelete(item.id)}
                 className="text-red-600"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -182,7 +192,7 @@ export default function SupplierPage() {
         },
       },
     ],
-    [router]
+    [router, handleDelete]
   )
 
   const navbarActions = [
@@ -212,12 +222,13 @@ export default function SupplierPage() {
   ]
 
   return (
-    <div className="flex flex-col h-full">
-      <Navbar 
-        title="Supplier" 
-        actions={navbarActions}
-      />
-      <div className="flex-1 p-4 md:p-6 space-y-6">
+    <>
+      <div className="flex flex-col h-full">
+        <Navbar 
+          title="Supplier" 
+          actions={navbarActions}
+        />
+        <div className="flex-1 p-4 md:p-6 space-y-6">
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -261,11 +272,23 @@ export default function SupplierPage() {
             searchPlaceholder="Cari supplier..."
             hideColumnToggle={true}
           />
-        </CardContent>
-      </Card>
-
-
+          </CardContent>
+        </Card>
+        </div>
       </div>
-    </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Supplier"
+        description={`Apakah Anda yakin ingin menghapus supplier "${deleteDialog.supplier?.nama_supplier}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+      />
+    </>
   )
 }

@@ -331,6 +331,34 @@ function AddPembelianPage() {
       return;
     }
 
+    // Validasi supplier eksklusif
+    if (formData.supplier_id) {
+      const selectedBahanBaku = bahanBakuList.find(b => b.id === formData.bahan_baku_id);
+      if (selectedBahanBaku) {
+        try {
+          // Ambil data bahan baku dengan supplier eksklusif
+          const { data: bahanBakuData, error } = await supabase
+            .from('bahan_baku')
+            .select('supplier_eksklusif_id, suppliers:supplier_eksklusif_id(nama_supplier)')
+            .eq('id', formData.bahan_baku_id)
+            .single();
+
+          if (error) {
+            console.error('Error checking supplier eksklusif:', error);
+          } else if (bahanBakuData?.supplier_eksklusif_id && bahanBakuData.supplier_eksklusif_id !== formData.supplier_id) {
+            const supplierEksklusif = bahanBakuData.suppliers?.nama_supplier || 'supplier yang ditentukan';
+            const supplierDipilih = supplierList.find(s => s.id === formData.supplier_id)?.nama_supplier || 'supplier yang dipilih';
+            toast.error(`Pembelian bahan baku "${selectedBahanBaku.nama_bahan_baku}" hanya dapat dilakukan dari supplier eksklusif: ${supplierEksklusif}. Anda memilih: ${supplierDipilih}`);
+            return;
+          }
+        } catch (error) {
+          console.error('Error validating supplier eksklusif:', error);
+          toast.error('Terjadi kesalahan saat memvalidasi supplier eksklusif');
+          return;
+        }
+      }
+    }
+
     if (formData.jumlah <= 0) {
       toast.error('Jumlah harus lebih dari 0');
       return;

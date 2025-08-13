@@ -1,0 +1,87 @@
+
+# Analisa Hubungan Produk dan Supplier
+
+## Kesimpulan Awal
+
+Berdasarkan analisa mendalam terhadap skema database (`db.sql`) dan struktur kode aplikasi, dapat disimpulkan bahwa **tidak ada hubungan langsung** antara entitas produk (baik `produk_jadi` maupun `bahan_baku`) dengan entitas `suppliers`.
+
+Hubungan antara keduanya bersifat **tidak langsung (indirect)** dan hanya dapat dilacak melalui tabel transaksi, yaitu `pembelian`.
+
+## Analisa Skema Database (`db.sql`)
+
+1.  **Tabel `suppliers`**: Menyimpan data master supplier.
+    ```sql
+    CREATE TABLE public.suppliers (
+        id uuid DEFAULT gen_random_uuid() NOT NULL,
+        nama_supplier text NOT NULL,
+        kontak text,
+        alamat text,
+        user_id uuid,
+        created_at timestamp with time zone DEFAULT now()
+    );
+    ```
+
+2.  **Tabel `bahan_baku` (Produk Mentah)**: Menyimpan data master bahan baku. Tabel ini **tidak memiliki** kolom `supplier_id`.
+    ```sql
+    CREATE TABLE public.bahan_baku (
+        id uuid DEFAULT gen_random_uuid() NOT NULL,
+        nama_bahan_baku text NOT NULL,
+        stok numeric DEFAULT 0 NOT NULL,
+        ...
+    );
+    ```
+
+3.  **Tabel `produk_jadi` (Produk Jadi)**: Menyimpan data produk yang siap dijual. Tabel ini juga **tidak memiliki** kolom `supplier_id`.
+    ```sql
+    CREATE TABLE public.produk_jadi (
+        id uuid DEFAULT gen_random_uuid() NOT NULL,
+        nama_produk_jadi text NOT NULL,
+        sku text NOT NULL,
+        harga_jual numeric DEFAULT 0 NOT NULL,
+        ...
+    );
+    ```
+
+4.  **Tabel `pembelian` (Jembatan Hubungan)**: Tabel inilah yang menjadi kunci hubungan antara `bahan_baku` dan `suppliers`. Setiap record pembelian mencatat `bahan_baku_id` yang dibeli dan `supplier_id` dari siapa barang itu dibeli.
+    ```sql
+    CREATE TABLE public.pembelian (
+        id uuid DEFAULT gen_random_uuid() NOT NULL,
+        bahan_baku_id uuid NOT NULL,  -- Foreign Key ke bahan_baku
+        jumlah numeric NOT NULL,
+        harga_beli numeric DEFAULT 0,
+        supplier_id uuid,           -- Foreign Key ke suppliers
+        ...
+    );
+    ```
+
+## Analisa Kode dan Alur Aplikasi
+
+Struktur direktori dan file komponen mengkonfirmasi alur yang didikte oleh database:
+
+-   **Form Input**: Form untuk membuat `bahan_baku` baru (kemungkinan di `src/components/forms/bahan-baku-form.tsx`) tidak akan memiliki input untuk memilih supplier. Begitu pula dengan form `produk-jadi-form.tsx`.
+-   **Form Pembelian**: Form untuk mencatat transaksi pembelian (kemungkinan di `src/components/forms/pembelian-form.tsx`) adalah tempat di mana pengguna akan memilih `Supplier` dan `Bahan Baku` yang dibeli dalam satu transaksi.
+-   **Tipe Data**: Definisi tipe TypeScript dalam direktori `src/types/` kemungkinan besar akan mencerminkan struktur ini, di mana tipe `BahanBaku` atau `ProdukJadi` tidak akan memiliki properti `supplier`.
+
+## Alur Logis untuk Menentukan Supplier
+
+Untuk mengetahui siapa saja yang pernah menyuplai sebuah `bahan_baku` tertentu, alur query-nya adalah sebagai berikut:
+
+1.  Dapatkan `id` dari `bahan_baku` yang ingin dicari.
+2.  Cari semua entri di tabel `pembelian` yang memiliki `bahan_baku_id` tersebut.
+3.  Dari hasil pencarian di tabel `pembelian`, ambil `supplier_id` yang unik.
+4.  Gunakan `supplier_id` tersebut untuk mendapatkan detail supplier dari tabel `suppliers`.
+
+**Contoh Query SQL:**
+
+```sql
+SELECT DISTINCT s.id, s.nama_supplier, s.kontak, s.alamat
+FROM public.suppliers s
+JOIN public.pembelian p ON s.id = p.supplier_id
+WHERE p.bahan_baku_id = 'uuid-bahan-baku-yang-dicari';
+```
+
+## Implikasi
+
+-   Sebuah `bahan_baku` tidak terikat pada satu supplier saja. Ia bisa dibeli dari banyak supplier yang berbeda dari waktu ke waktu.
+-   Tidak ada konsep "supplier utama" untuk sebuah bahan baku di level skema database. Konsep ini mungkin bisa diimplementasikan di logika aplikasi (misalnya, supplier yang paling sering melakukan transaksi untuk barang tersebut).
+-   Untuk `produk_jadi`, hubungan ke supplier menjadi lebih jauh lagi. Kita hanya bisa mengetahui supplier dari bahan-bahan baku yang menyusun produk jadi tersebut melalui tabel `resep`, lalu mengikuti alur yang sama seperti di atas untuk setiap bahan baku.

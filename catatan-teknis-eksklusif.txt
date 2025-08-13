@@ -1,0 +1,129 @@
+### Catatan Teknis: Laporan Akuntabilitas dengan Model Supplier Eksklusif
+
+**Tanggal**: 13 Agustus 2025
+**Tujuan**: Menyediakan metode sederhana dan berisiko rendah untuk menghasilkan laporan akuntabilitas bagi supplier utama, dengan fokus pada produk yang mereka suplai secara eksklusif.
+
+---
+
+### 1. Konsep Utama
+
+Solusi ini didasarkan pada aturan bisnis bahwa beberapa bahan baku hanya disuplai oleh satu supplier tertentu. Kita akan memanfaatkan ini dengan menambahkan penanda di level database untuk bahan baku tersebut.
+
+- **Bahan Baku Eksklusif**: Sebuah `bahan_baku` yang ditandai dengan `supplier_eksklusif_id`. Untuk item ini, semua histori stok (pembelian, pemakaian, sisa) dianggap 100% milik supplier tersebut.
+- **Bahan Baku Umum**: Sebuah `bahan_baku` yang `supplier_eksklusif_id`-nya `NULL`. Item ini bisa dibeli dari siapa saja dan tidak termasuk dalam laporan akuntabilitas khusus ini.
+
+---
+
+### 2. Perubahan Skema Database (Satu Kolom)
+
+Perubahan yang diperlukan pada database sangat minimal. Kita hanya perlu menambahkan satu kolom opsional ke tabel `bahan_baku`.
+
+**Perintah SQL:**
+
+```sql
+-- Menambahkan kolom foreign key yang bisa null ke tabel bahan_baku
+ALTER TABLE public.bahan_baku
+ADD COLUMN supplier_eksklusif_id UUID NULL,
+ADD CONSTRAINT fk_supplier_eksklusif
+   FOREIGN KEY(supplier_eksklusif_id)
+   REFERENCES public.suppliers(id)
+   ON DELETE SET NULL;
+
+-- (Opsional) Menambahkan index untuk mempercepat pencarian bahan baku per supplier eksklusif
+CREATE INDEX idx_bahan_baku_supplier_eksklusif ON public.bahan_baku(supplier_eksklusif_id);
+```
+
+---
+
+### 3. Perubahan Logika Aplikasi
+
+Beberapa penyesuaian diperlukan di sisi aplikasi untuk mendukung dan menjaga integritas data dari model baru ini.
+
+**A. Form Master Data Bahan Baku**
+- Pada halaman untuk menambah atau mengubah data `bahan_baku`, perlu ditambahkan satu field opsional berupa dropdown.
+- Dropdown ini berisi daftar semua `suppliers` dan satu pilihan kosong (untuk `NULL`).
+- Pengguna bisa menetapkan satu supplier sebagai pemasok eksklusif untuk bahan baku tersebut.
+
+**B. Validasi pada Proses Pembelian**
+- Ini adalah langkah penting untuk menjaga data tetap akurat.
+- Saat pengguna membuat transaksi `pembelian` baru, aplikasi harus melakukan validasi:
+  1. Ambil data `bahan_baku` yang dipilih dalam pembelian.
+  2. Cek apakah `supplier_eksklusif_id` pada bahan baku tersebut terisi.
+  3. **Jika terisi**, pastikan `supplier_id` pada transaksi pembelian **sama persis** dengan `supplier_eksklusif_id` bahan baku.
+  4. Jika berbeda, tampilkan pesan error kepada pengguna (misal: "Bahan baku ini adalah produk eksklusif dari [Nama Supplier]. Anda tidak bisa membelinya dari supplier lain.") dan batalkan transaksi.
+
+---
+
+### 4. Logika dan Query untuk Laporan Akuntabilitas
+
+Dengan struktur ini, query untuk laporan menjadi jauh lebih sederhana dan akurat untuk item eksklusif.
+
+**Langkah 1: Dapatkan semua bahan baku eksklusif untuk supplier tertentu.**
+
+```sql
+-- Ganti 'uuid-supplier-utama' dengan ID supplier yang sebenarnya
+SELECT id, nama_bahan_baku, stok AS sisa_stok_sekarang
+FROM public.bahan_baku
+WHERE supplier_eksklusif_id = 'uuid-supplier-utama';
+```
+
+**Langkah 2: Untuk setiap bahan baku, hitung metrik lainnya.**
+
+- **Total Pernah Dibeli**: Jumlah total unit yang pernah dibeli.
+  ```sql
+  SELECT COALESCE(SUM(jumlah), 0) AS total_dibeli
+  FROM public.pembelian
+  WHERE bahan_baku_id = 'id-bahan-baku-eksklusif';
+  ```
+
+- **Total Terpakai**: Dihitung dengan logika sederhana.
+  `Total Terpakai = (Total Pernah Dibeli) - (Sisa Stok Sekarang)`
+
+- **Reservasi Tersisa**: Jumlah yang masih direservasi di supplier (belum masuk gudang).
+  ```sql
+  SELECT COALESCE(SUM(jumlah_reservasi), 0) AS total_reservasi
+  FROM public.reservasi_stok_supplier
+  WHERE bahan_baku_id = 'id-bahan-baku-eksklusif'
+    AND supplier_id = 'uuid-supplier-utama';
+  ```
+
+**Contoh Query Laporan Lengkap (Menggabungkan Semua Logika)**
+
+Query ini akan menghasilkan laporan lengkap yang Anda butuhkan untuk satu supplier.
+
+```sql
+-- Ganti 'uuid-supplier-utama' dengan ID supplier yang sebenarnya
+WITH
+  BahanBakuEksklusif AS (
+    -- Langkah 1: Ambil semua bahan baku eksklusif & stoknya saat ini
+    SELECT id, nama_bahan_baku, stok AS sisa_stok_sekarang
+    FROM public.bahan_baku
+    WHERE supplier_eksklusif_id = 'uuid-supplier-utama'
+  ),
+  TotalPembelian AS (
+    -- Langkah 2: Hitung total pembelian untuk bahan baku tersebut
+    SELECT bahan_baku_id, SUM(jumlah) AS total_dibeli
+    FROM public.pembelian
+    WHERE bahan_baku_id IN (SELECT id FROM BahanBakuEksklusif)
+    GROUP BY bahan_baku_id
+  ),
+  TotalReservasi AS (
+    -- Langkah 3: Hitung total reservasi aktif
+    SELECT bahan_baku_id, SUM(jumlah_reservasi) AS total_reservasi
+    FROM public.reservasi_stok_supplier
+    WHERE supplier_id = 'uuid-supplier-utama'
+      AND bahan_baku_id IN (SELECT id FROM BahanBakuEksklusif)
+    GROUP BY bahan_baku_id
+  )
+-- Final Select: Gabungkan semua data menjadi satu laporan
+SELECT
+  bbe.nama_bahan_baku,
+  COALESCE(tp.total_dibeli, 0) AS total_pernah_dibeli,
+  (COALESCE(tp.total_dibeli, 0) - bbe.sisa_stok_sekarang) AS total_terpakai,
+  bbe.sisa_stok_sekarang AS sisa_di_gudang,
+  COALESCE(tr.total_reservasi, 0) AS sisa_reservasi_di_supplier
+FROM BahanBakuEksklusif bbe
+LEFT JOIN TotalPembelian tp ON bbe.id = tp.bahan_baku_id
+LEFT JOIN TotalReservasi tr ON bbe.id = tr.bahan_baku_id
+ORDER BY bbe.nama_bahan_baku;
+```

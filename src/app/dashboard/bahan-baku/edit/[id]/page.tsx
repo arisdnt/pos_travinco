@@ -21,11 +21,13 @@ export default function EditBahanBakuPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [kategoris, setKategoris] = useState<any[]>([]);
   const [unitDasars, setUnitDasars] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     nama_bahan_baku: '',
     stok: 0,
     kategori_id: '',
-    unit_dasar_id: ''
+    unit_dasar_id: '',
+    supplier_eksklusif_id: ''
   });
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function EditBahanBakuPage() {
       fetchBahanBaku();
       fetchKategoris();
       fetchUnitDasars();
+      fetchSuppliers();
     }
   }, [id]);
 
@@ -64,10 +67,24 @@ export default function EditBahanBakuPage() {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('nama_supplier');
+      
+      if (error) throw error;
+      setSuppliers(data || []);
+    } catch (error: any) {
+      console.error('Error fetching suppliers:', error);
+    }
+  };
+
   const fetchBahanBaku = async () => {
     try {
       const { data, error } = await supabase
-        .from('view_bahan_baku_detail')
+        .from('bahan_baku')
         .select('*')
         .eq('id', id)
         .single();
@@ -79,7 +96,8 @@ export default function EditBahanBakuPage() {
           nama_bahan_baku: data.nama_bahan_baku,
           stok: data.stok,
           kategori_id: data.kategori_id || '',
-          unit_dasar_id: data.unit_dasar_id || ''
+          unit_dasar_id: data.unit_dasar_id || '',
+          supplier_eksklusif_id: data.supplier_eksklusif_id || 'none'
         });
       }
     } catch (error: any) {
@@ -102,7 +120,7 @@ export default function EditBahanBakuPage() {
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value === 'none' ? '' : value
     }));
   };
 
@@ -126,7 +144,8 @@ export default function EditBahanBakuPage() {
       const updateData: any = {
         nama_bahan_baku: formData.nama_bahan_baku,
         stok: formData.stok,
-        unit_dasar_id: formData.unit_dasar_id
+        unit_dasar_id: formData.unit_dasar_id,
+        supplier_eksklusif_id: formData.supplier_eksklusif_id || null
       };
 
       // Only include kategori_id if it has value
@@ -272,6 +291,31 @@ export default function EditBahanBakuPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="supplier_eksklusif_id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Supplier Eksklusif
+                  </Label>
+                  <Select
+                    value={formData.supplier_eksklusif_id}
+                    onValueChange={(value) => handleSelectChange('supplier_eksklusif_id', value)}
+                  >
+                    <SelectTrigger className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <SelectValue placeholder="Pilih supplier eksklusif (opsional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Tidak ada supplier eksklusif</SelectItem>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.nama_supplier}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Jika dipilih, pembelian bahan baku ini hanya dapat dilakukan dari supplier yang ditentukan
+                  </p>
                 </div>
               </div>
 

@@ -31,8 +31,12 @@ type BahanBaku = {
   id: string
   nama_bahan_baku: string
   stok: number
-  nama_unit: string
-  nama_kategori: string
+  kategori_id?: string
+  unit_dasar_id?: string
+  supplier_eksklusif_id?: string
+  kategori?: { nama_kategori: string }
+  unit_dasar?: { nama_unit: string }
+  supplier_eksklusif?: { nama_supplier: string }
   user_id: string
   created_at: string
 }
@@ -171,22 +175,41 @@ export default function BahanBakuPage() {
               {row.getValue("nama_bahan_baku")}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
-              {row.original.nama_kategori || 'Tanpa Kategori'}
+              {row.original.kategori?.nama_kategori || 'Tanpa Kategori'}
             </div>
           </div>
         ),
       },
 
       {
-        accessorKey: "nama_unit",
+        accessorKey: "unit_dasar",
         header: ({ column }) => (
           <SortableHeader column={column}>Unit</SortableHeader>
         ),
         cell: ({ row }) => (
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            {row.original.nama_unit || 'Unit tidak tersedia'}
+            {row.original.unit_dasar?.nama_unit || 'Unit tidak tersedia'}
           </div>
         ),
+      },
+
+      {
+        accessorKey: "supplier_eksklusif",
+        header: ({ column }) => (
+          <SortableHeader column={column}>Supplier Eksklusif</SortableHeader>
+        ),
+        cell: ({ row }) => {
+          const supplier = row.original.supplier_eksklusif;
+          return supplier ? (
+            <div className="text-sm text-gray-900 dark:text-white font-medium">
+              {supplier.nama_supplier}
+            </div>
+          ) : (
+            <div className="text-sm text-red-600 dark:text-red-400 italic">
+              Tidak terdapat supplier eksklusif
+            </div>
+          );
+        },
       },
 
       {
@@ -196,7 +219,7 @@ export default function BahanBakuPage() {
         ),
         cell: ({ row }) => {
           const stok = row.getValue("stok") as number;
-          const unit = row.original.nama_unit || 'unit';
+          const unit = row.original.unit_dasar?.nama_unit || 'unit';
           const status = getStokStatus(stok);
           return (
             <div className={`font-medium ${status.color}`}>

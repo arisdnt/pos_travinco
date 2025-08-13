@@ -23,6 +23,7 @@ export type Database = {
           stok: number
           kategori_id?: string
           unit_dasar_id?: string
+          supplier_eksklusif_id?: string
           user_id: string
           created_at: string
         }
@@ -32,6 +33,7 @@ export type Database = {
           stok?: number
           kategori_id?: string
           unit_dasar_id?: string
+          supplier_eksklusif_id?: string
           user_id: string
           created_at?: string
         }
@@ -41,6 +43,7 @@ export type Database = {
           stok?: number
           kategori_id?: string
           unit_dasar_id?: string
+          supplier_eksklusif_id?: string
           user_id?: string
           created_at?: string
         }
@@ -152,6 +155,78 @@ export type Database = {
           user_id?: string
         }
       }
+      suppliers: {
+        Row: {
+          id: string
+          nama_supplier: string
+          kontak?: string
+          alamat?: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nama_supplier: string
+          kontak?: string
+          alamat?: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nama_supplier?: string
+          kontak?: string
+          alamat?: string
+          user_id?: string
+          created_at?: string
+        }
+      }
+      kategori: {
+        Row: {
+          id: string
+          nama_kategori: string
+          deskripsi?: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nama_kategori: string
+          deskripsi?: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nama_kategori?: string
+          deskripsi?: string
+          user_id?: string
+          created_at?: string
+        }
+      }
+      unit_dasar: {
+        Row: {
+          id: string
+          nama_unit: string
+          deskripsi?: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nama_unit: string
+          deskripsi?: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nama_unit?: string
+          deskripsi?: string
+          user_id?: string
+          created_at?: string
+        }
+      }
     }
     Functions: {
       check_stok_tersedia: {
@@ -200,8 +275,13 @@ export const getCurrentUser = async () => {
 
 export const getBahanBaku = async () => {
   const { data, error } = await supabase
-    .from('view_bahan_baku_detail')
-    .select('*')
+    .from('bahan_baku')
+    .select(`
+      *,
+      kategori:kategori_id(nama_kategori),
+      unit_dasar:unit_dasar_id(nama_unit),
+      supplier_eksklusif:supplier_eksklusif_id(nama_supplier)
+    `)
     .order('created_at', { ascending: false })
   
   if (error) throw error

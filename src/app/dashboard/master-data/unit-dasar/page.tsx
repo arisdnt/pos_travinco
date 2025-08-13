@@ -8,6 +8,7 @@ import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-
 import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Navbar } from '@/components/layout/navbar';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { Plus, Ruler, Eye, Edit, Trash2, Package, BarChart3, TrendingUp } from 'lucide-react';
@@ -31,6 +32,11 @@ export default function UnitDasarPage() {
   const [unitLoading, setUnitLoading] = useState(true);
   const [unitSearchTerm, setUnitSearchTerm] = useState('');
   const [unitDeleting, setUnitDeleting] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    unitDasar: UnitDasar | null;
+    loading: boolean;
+  }>({ open: false, unitDasar: null, loading: false });
   const [stats, setStats] = useState<UnitDasarStats>({
     totalUnits: 0,
     unitsWithDescription: 0,
@@ -118,33 +124,39 @@ export default function UnitDasarPage() {
     router.push(`/dashboard/master-data/konfigurasi-unit/unit-dasar/${id}/edit`);
   };
 
-  const handleDeleteUnit = async (id: string, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus unit dasar "${nama}"?`)) {
-      return;
-    }
+  const handleDeleteUnit = (unitDasar: UnitDasar) => {
+    setDeleteDialog({ open: true, unitDasar, loading: false });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.unitDasar) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
-      setUnitDeleting(id);
       const supabase = createClient();
-      
       const { error } = await supabase
         .from('unit_dasar')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.unitDasar.id);
 
       if (error) {
-        console.error('Error deleting unit:', error);
-        toast.error('Gagal menghapus unit dasar');
+        if (error.code === '23503') {
+          toast.error('Unit dasar tidak dapat dihapus karena masih digunakan oleh data lain');
+        } else {
+          throw error;
+        }
         return;
       }
 
-      toast.success('Unit dasar berhasil dihapus');
-      fetchUnitData();
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Terjadi kesalahan saat menghapus data');
+      toast.success('Unit dasar berhasil dihapus!');
+      setDeleteDialog({ open: false, unitDasar: null, loading: false });
+      fetchUnitData(); // Refresh data
+    } catch (error: any) {
+      console.error('Error deleting unit dasar:', error);
+      toast.error(error.message || 'Gagal menghapus unit dasar');
     } finally {
-      setUnitDeleting(null);
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -226,7 +238,7 @@ export default function UnitDasarPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDeleteUnit(item.id, item.nama_unit)}
+              onClick={() => handleDeleteUnit(item)}
               className="text-red-600"
               disabled={unitDeleting === item.id}
             >
@@ -240,6 +252,7 @@ export default function UnitDasarPage() {
   ], [router, unitDeleting]);
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <Navbar 
         title="Unit Dasar" 
@@ -291,5 +304,19 @@ export default function UnitDasarPage() {
         </Card>
       </div>
     </div>
+
+    {/* Confirmation Dialog */}
+    <ConfirmationDialog
+      open={deleteDialog.open}
+      onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+      title="Hapus Unit Dasar"
+      description={`Apakah Anda yakin ingin menghapus unit dasar "${deleteDialog.unitDasar?.nama_unit}"? Tindakan ini tidak dapat dibatalkan.`}
+      confirmText="Hapus"
+      cancelText="Batal"
+      variant="destructive"
+      onConfirm={handleConfirmDelete}
+      loading={deleteDialog.loading}
+    />
+    </>
   );
 }
