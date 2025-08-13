@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { supabase, getProdukJadi, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -40,6 +41,15 @@ export default function ProdukJadiPage() {
     lowStock: 0,
     outOfStock: 0,
     totalValue: 0
+  })
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean
+    produk: ProdukJadi | null
+    loading: boolean
+  }>({
+    open: false,
+    produk: null,
+    loading: false
   })
 
   const fetchData = async () => {
@@ -81,22 +91,45 @@ export default function ProdukJadiPage() {
     router.push(`/dashboard/produk-jadi/edit/${id}`)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus produk ini?')) return
+  const handleDelete = useCallback((id: string) => {
+    const produk = data.find(d => d.id === id)
+    if (!produk) return
+    
+    setDeleteDialog({
+      open: true,
+      produk: produk,
+      loading: false
+    })
+  }, [data])
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.produk) return
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }))
 
     try {
+      const user = await getCurrentUser()
+      if (!user) {
+        toast.error('Anda harus login terlebih dahulu')
+        return
+      }
+
       const { error } = await supabase
         .from('produk_jadi')
         .delete()
-        .eq('id', id)
+        .eq('id', deleteDialog.produk.id)
+        .eq('user_id', user.id)
 
       if (error) throw error
 
-      toast.success('Produk berhasil dihapus')
-      fetchData()
-    } catch (error) {
-      console.error('Error deleting product:', error)
-      toast.error('Gagal menghapus produk')
+      toast.success('Produk jadi berhasil dihapus!')
+      setDeleteDialog({ open: false, produk: null, loading: false })
+      fetchData() // Refresh data
+    } catch (error: any) {
+      console.error('Error deleting produk jadi:', error)
+      toast.error(error.message || 'Gagal menghapus produk jadi')
+    } finally {
+      setDeleteDialog(prev => ({ ...prev, loading: false }))
     }
   }
 
@@ -305,6 +338,19 @@ export default function ProdukJadiPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Produk Jadi"
+        description={`Apakah Anda yakin ingin menghapus produk "${deleteDialog.produk?.nama_produk_jadi}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+      />
     </div>
   )
 }

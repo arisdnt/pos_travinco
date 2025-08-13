@@ -346,7 +346,7 @@ function AddPembelianPage() {
           if (error) {
             console.error('Error checking supplier eksklusif:', error);
           } else if (bahanBakuData?.supplier_eksklusif_id && bahanBakuData.supplier_eksklusif_id !== formData.supplier_id) {
-            const supplierEksklusif = bahanBakuData.suppliers?.nama_supplier || 'supplier yang ditentukan';
+            const supplierEksklusif = (bahanBakuData.suppliers as any)?.nama_supplier || 'supplier yang ditentukan';
             const supplierDipilih = supplierList.find(s => s.id === formData.supplier_id)?.nama_supplier || 'supplier yang dipilih';
             toast.error(`Pembelian bahan baku "${selectedBahanBaku.nama_bahan_baku}" hanya dapat dilakukan dari supplier eksklusif: ${supplierEksklusif}. Anda memilih: ${supplierDipilih}`);
             return;

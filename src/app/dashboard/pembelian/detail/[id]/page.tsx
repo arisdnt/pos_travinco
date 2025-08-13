@@ -53,7 +53,7 @@ export default function DetailPembelianPage() {
           bahan_baku (
             id,
             nama_bahan_baku,
-            unit
+            unit_dasar:unit_dasar_id(nama_unit)
           )
         `)
         .eq('id', id)
@@ -69,7 +69,7 @@ export default function DetailPembelianPage() {
             bahan_baku (
               id,
               nama_bahan_baku,
-              unit
+              unit_dasar:unit_dasar_id(nama_unit)
             )
           `)
           .eq('id', id)

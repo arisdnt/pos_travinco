@@ -226,7 +226,7 @@ export default function UnitDasarPage() {
         return (
           <ActionDropdown>
             <DropdownMenuItem 
-              onClick={() => router.push(`/dashboard/master-data/unit-dasar/${item.id}`)}
+              onClick={() => router.push(`/dashboard/master-data/konfigurasi-unit/unit-dasar/${item.id}`)}
             >
               <Eye className="mr-2 h-4 w-4" />
               Lihat Detail

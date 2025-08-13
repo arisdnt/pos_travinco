@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
@@ -13,6 +13,7 @@ import { Navbar, createNavbarActions } from '@/components/layout/navbar';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 // Types
 interface Penjualan {
@@ -34,6 +35,11 @@ export default function PenjualanPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [penjualanData, setPenjualanData] = useState<Penjualan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    penjualan: Penjualan | null;
+    loading: boolean;
+  }>({ open: false, penjualan: null, loading: false });
 
   useEffect(() => {
     fetchPenjualan();
@@ -67,10 +73,12 @@ export default function PenjualanPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus transaksi penjualan ini?')) {
-      return;
-    }
+  const handleDelete = useCallback((penjualan: Penjualan) => {
+    setDeleteDialog({ open: true, penjualan, loading: false });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.penjualan) return;
 
     try {
       const user = await getCurrentUser();
@@ -79,20 +87,24 @@ export default function PenjualanPage() {
         return;
       }
 
+      setDeleteDialog(prev => ({ ...prev, loading: true }));
+
       const { error } = await supabase
         .from('penjualan')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.penjualan.id);
 
       if (error) throw error;
 
       toast.success('Transaksi penjualan berhasil dihapus!');
+      setDeleteDialog({ open: false, penjualan: null, loading: false });
       fetchPenjualan(); // Refresh data
     } catch (error: any) {
       console.error('Error deleting penjualan:', error);
       toast.error(error.message || 'Gagal menghapus transaksi penjualan');
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [deleteDialog.penjualan, fetchPenjualan]);
 
 
 
@@ -164,7 +176,7 @@ export default function PenjualanPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => handleDelete(row.original)}
               className="text-red-600 focus:text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -245,8 +257,9 @@ export default function PenjualanPage() {
           />
         </div>
 
-        <Card>
-          <CardContent>
+        {/* Main Content */}
+        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <CardContent className="p-6">
             <DataTable
               columns={columns}
               data={penjualanData}
@@ -257,6 +270,17 @@ export default function PenjualanPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Transaksi Penjualan"
+        description={`Apakah Anda yakin ingin menghapus transaksi penjualan ${deleteDialog.penjualan?.produk_jadi?.nama_produk_jadi || 'ini'}? Tindakan ini tidak dapat dibatalkan.`}
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+        confirmText="Hapus"
+        cancelText="Batal"
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import { Navbar } from "@/components/layout/navbar"
 import { StatCard, StatCardVariants } from "@/components/ui/stat-card"
 import { supabase, getBahanBaku, getCurrentUser } from "@/lib/supabase"
 import { toast } from "sonner"
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
 
 // Data akan diambil dari Supabase sesuai skema database
 
@@ -52,6 +53,11 @@ export default function BahanBakuPage() {
     outOfStock: 0,
     totalItems: 0
   });
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; bahanBaku: BahanBaku | null; loading: boolean }>({
+    open: false,
+    bahanBaku: null,
+    loading: false
+  })
 
   useEffect(() => {
     fetchData();
@@ -87,76 +93,39 @@ export default function BahanBakuPage() {
     router.push(`/dashboard/bahan-baku/edit/${item.id}`);
   }
 
-  const handleDelete = async (id: string) => {
-    const item = data.find(d => d.id === id);
-    if (!item) {
-      toast.error('Item tidak ditemukan');
-      return;
-    }
-    
-    const confirmed = window.confirm(
-      `Apakah Anda yakin ingin menghapus bahan baku "${item.nama_bahan_baku}"?`
-    );
-    
-    if (!confirmed) return;
+  const handleDelete = useCallback((item: BahanBaku) => {
+    setDeleteDialog({ open: true, bahanBaku: item, loading: false });
+  }, [])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.bahanBaku) return;
 
     try {
-      // Show loading state
-      toast.loading('Menghapus bahan baku...', { id: 'delete-loading' });
-      
       const user = await getCurrentUser();
       if (!user) {
-        toast.error('Anda harus login terlebih dahulu', { id: 'delete-loading' });
+        toast.error('Anda harus login terlebih dahulu');
         return;
       }
 
-      console.log('Attempting to delete:', { id, user_id: user.id, item_name: item.nama_bahan_baku });
+      setDeleteDialog(prev => ({ ...prev, loading: true }));
 
-      // First check if item exists and belongs to user
-      const { data: checkData, error: checkError } = await supabase
-        .from('bahan_baku')
-        .select('id, nama_bahan_baku, user_id')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single();
-
-      if (checkError) {
-        console.error('Check error:', checkError);
-        if (checkError.code === 'PGRST116') {
-          toast.error('Item tidak ditemukan atau Anda tidak memiliki akses', { id: 'delete-loading' });
-        } else {
-          toast.error(`Error saat verifikasi: ${checkError.message}`, { id: 'delete-loading' });
-        }
-        return;
-      }
-
-      if (!checkData) {
-        toast.error('Item tidak ditemukan atau Anda tidak memiliki akses', { id: 'delete-loading' });
-        return;
-      }
-
-      console.log('Item verified, proceeding with delete:', checkData);
-
-      // Proceed with delete
-      const { error: deleteError } = await supabase
+      const { error } = await supabase
         .from('bahan_baku')
         .delete()
-        .eq('id', id)
+        .eq('id', deleteDialog.bahanBaku.id)
         .eq('user_id', user.id);
 
-      if (deleteError) {
-        console.error('Delete error:', deleteError);
-        throw deleteError;
-      }
+      if (error) throw error;
 
-      console.log('Delete successful');
-      toast.success('Bahan baku berhasil dihapus!', { id: 'delete-loading' });
-      fetchData(); // Refresh data
+      toast.success('Bahan baku berhasil dihapus!');
+      setDeleteDialog({ open: false, bahanBaku: null, loading: false });
+      fetchData();
     } catch (error: any) {
       console.error('Error deleting bahan baku:', error);
-      toast.error(error.message || 'Gagal menghapus bahan baku', { id: 'delete-loading' });
+      toast.error(error.message || 'Gagal menghapus bahan baku');
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  }
+  }, [deleteDialog.bahanBaku])
 
 
 
@@ -261,7 +230,7 @@ export default function BahanBakuPage() {
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem 
-                onClick={() => handleDelete(item.id)}
+                onClick={() => handleDelete(item)}
                 className="text-red-600"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -272,7 +241,7 @@ export default function BahanBakuPage() {
         },
       },
     ],
-    [router]
+    [router, handleDelete]
   )
 
   const navbarActions = [
@@ -356,6 +325,18 @@ export default function BahanBakuPage() {
 
 
       </div>
+
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Bahan Baku"
+        description={`Apakah Anda yakin ingin menghapus bahan baku "${deleteDialog.bahanBaku?.nama_bahan_baku}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+      />
     </div>
   )
 }

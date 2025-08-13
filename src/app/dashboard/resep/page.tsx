@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-table';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -39,6 +40,15 @@ export default function ResepPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean
+    resep: any | null
+    loading: boolean
+  }>({
+    open: false,
+    resep: null,
+    loading: false
+  })
 
   useEffect(() => {
     fetchResepData();
@@ -105,23 +115,38 @@ export default function ResepPage() {
     }
   };
 
-  const handleDelete = async (produkJadiId: string) => {
-    const confirmed = window.confirm('Apakah Anda yakin ingin menghapus seluruh resep untuk produk ini?');
-    if (!confirmed) return;
+  const handleDelete = useCallback((produkJadiId: string) => {
+    const resep = data.find(d => d.produk_jadi_id === produkJadiId);
+    if (!resep) return;
+    
+    setDeleteDialog({
+      open: true,
+      resep: resep,
+      loading: false
+    });
+  }, [data]);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.resep) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
       const { error } = await supabase
         .from('resep')
         .delete()
-        .eq('produk_jadi_id', produkJadiId);
+        .eq('produk_jadi_id', deleteDialog.resep.produk_jadi_id);
 
       if (error) throw error;
 
       toast.success('Resep berhasil dihapus!');
+      setDeleteDialog({ open: false, resep: null, loading: false });
       fetchResepData(); // Refresh data
     } catch (error: any) {
       console.error('Error deleting resep:', error);
       toast.error(error.message || 'Gagal menghapus resep');
+    } finally {
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -316,6 +341,19 @@ export default function ResepPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Resep"
+        description={`Apakah Anda yakin ingin menghapus seluruh resep untuk produk "${deleteDialog.resep?.nama_produk_jadi}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+      />
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function EditKemasanPage() {
     if (error) {
       console.error('Error fetching kemasan:', error);
       toast.error('Gagal memuat data kemasan');
-      router.push('/dashboard/master-data/konfigurasi-unit');
+      router.push('/dashboard/master-data/kemasan');
     } else if (data) {
       setFormData({
         nama_kemasan: data.nama_kemasan,
@@ -138,7 +138,7 @@ export default function EditKemasanPage() {
       }
     } else {
       toast.success('Kemasan berhasil diperbarui');
-      router.push('/dashboard/master-data/konfigurasi-unit');
+      router.push('/dashboard/master-data/kemasan');
     }
     setLoading(false);
   };
@@ -202,7 +202,7 @@ export default function EditKemasanPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => router.back()}
+          onClick={() => router.push('/dashboard/master-data/kemasan')}
           className="border-gray-300 dark:border-gray-600"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -316,7 +316,7 @@ export default function EditKemasanPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.back()}
+                onClick={() => router.push('/dashboard/master-data/kemasan')}
                 disabled={loading}
                 className="border-gray-300 dark:border-gray-600"
               >

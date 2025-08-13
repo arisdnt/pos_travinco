@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Navbar } from '@/components/layout/navbar';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Plus, Ruler, Package, Eye, Edit, Trash2, Filter, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
@@ -25,12 +26,22 @@ export default function KonfigurasiUnitPage() {
   const [unitLoading, setUnitLoading] = useState(true);
   const [unitSearchTerm, setUnitSearchTerm] = useState('');
   const [unitDeleting, setUnitDeleting] = useState<string | null>(null);
+  const [unitDeleteDialog, setUnitDeleteDialog] = useState<{
+    open: boolean;
+    unit: UnitDasar | null;
+    loading: boolean;
+  }>({ open: false, unit: null, loading: false });
   
   // Kemasan State
   const [kemasanData, setKemasanData] = useState<Kemasan[]>([]);
   const [kemasanLoading, setKemasanLoading] = useState(true);
   const [kemasanSearchTerm, setKemasanSearchTerm] = useState('');
   const [kemasanDeleting, setKemasanDeleting] = useState<string | null>(null);
+  const [kemasanDeleteDialog, setKemasanDeleteDialog] = useState<{
+    open: boolean;
+    kemasan: Kemasan | null;
+    loading: boolean;
+  }>({ open: false, kemasan: null, loading: false });
 
   const fetchUnitData = async () => {
     try {
@@ -107,19 +118,21 @@ export default function KonfigurasiUnitPage() {
     router.push(`/dashboard/master-data/konfigurasi-unit/unit-dasar/${id}/edit`);
   };
 
-  const handleDeleteUnit = async (id: string, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus unit dasar "${nama}"?\n\nTindakan ini tidak dapat dibatalkan.`)) {
-      return;
-    }
+  const handleDeleteUnit = useCallback((unit: UnitDasar) => {
+    setUnitDeleteDialog({ open: true, unit, loading: false });
+  }, []);
+
+  const handleConfirmDeleteUnit = useCallback(async () => {
+    if (!unitDeleteDialog.unit) return;
 
     try {
-      setUnitDeleting(id);
+      setUnitDeleteDialog(prev => ({ ...prev, loading: true }));
       const supabase = createClient();
       
       const { error } = await supabase
         .from('unit_dasar')
         .delete()
-        .eq('id', id);
+        .eq('id', unitDeleteDialog.unit.id);
 
       if (error) {
         console.error('Error deleting unit dasar:', error);
@@ -128,17 +141,19 @@ export default function KonfigurasiUnitPage() {
         } else {
           toast.error('Gagal menghapus unit dasar');
         }
-      } else {
-        toast.success('Unit dasar berhasil dihapus');
-        await fetchUnitData();
+        return;
       }
+
+      toast.success('Unit dasar berhasil dihapus');
+      setUnitDeleteDialog({ open: false, unit: null, loading: false });
+      await fetchUnitData();
     } catch (error) {
-      console.error('Error in handleDeleteUnit:', error);
+      console.error('Error in handleConfirmDeleteUnit:', error);
       toast.error('Terjadi kesalahan saat menghapus data');
     } finally {
-      setUnitDeleting(null);
+      setUnitDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [unitDeleteDialog.unit, fetchUnitData]);
 
   const handleAddKemasan = () => {
     router.push('/dashboard/master-data/konfigurasi-unit/kemasan/add');
@@ -148,19 +163,21 @@ export default function KonfigurasiUnitPage() {
     router.push(`/dashboard/master-data/konfigurasi-unit/kemasan/${id}/edit`);
   };
 
-  const handleDeleteKemasan = async (id: string, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus kemasan "${nama}"?\n\nTindakan ini tidak dapat dibatalkan.`)) {
-      return;
-    }
+  const handleDeleteKemasan = useCallback((kemasan: Kemasan) => {
+    setKemasanDeleteDialog({ open: true, kemasan, loading: false });
+  }, []);
+
+  const handleConfirmDeleteKemasan = useCallback(async () => {
+    if (!kemasanDeleteDialog.kemasan) return;
 
     try {
-      setKemasanDeleting(id);
+      setKemasanDeleteDialog(prev => ({ ...prev, loading: true }));
       const supabase = createClient();
       
       const { error } = await supabase
         .from('kemasan')
         .delete()
-        .eq('id', id);
+        .eq('id', kemasanDeleteDialog.kemasan.id);
 
       if (error) {
         console.error('Error deleting kemasan:', error);
@@ -169,17 +186,19 @@ export default function KonfigurasiUnitPage() {
         } else {
           toast.error('Gagal menghapus kemasan');
         }
-      } else {
-        toast.success('Kemasan berhasil dihapus');
-        await fetchKemasanData();
+        return;
       }
+
+      toast.success('Kemasan berhasil dihapus');
+      setKemasanDeleteDialog({ open: false, kemasan: null, loading: false });
+      await fetchKemasanData();
     } catch (error) {
-      console.error('Error in handleDeleteKemasan:', error);
+      console.error('Error in handleConfirmDeleteKemasan:', error);
       toast.error('Terjadi kesalahan saat menghapus data');
     } finally {
-      setKemasanDeleting(null);
+      setKemasanDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [kemasanDeleteDialog.kemasan, fetchKemasanData]);
 
   useEffect(() => {
     fetchUnitData();
@@ -256,12 +275,11 @@ export default function KonfigurasiUnitPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDeleteUnit(item.id, item.nama_unit)}
+              onClick={() => handleDeleteUnit(item)}
               className="text-red-600"
-              disabled={unitDeleting === item.id}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {unitDeleting === item.id ? 'Menghapus...' : 'Hapus'}
+              Hapus
             </DropdownMenuItem>
           </ActionDropdown>
         )
@@ -350,12 +368,11 @@ export default function KonfigurasiUnitPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDeleteKemasan(item.id, item.nama_kemasan)}
+              onClick={() => handleDeleteKemasan(item)}
               className="text-red-600"
-              disabled={kemasanDeleting === item.id}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              {kemasanDeleting === item.id ? 'Menghapus...' : 'Hapus'}
+              Hapus
             </DropdownMenuItem>
           </ActionDropdown>
         )
@@ -481,6 +498,32 @@ export default function KonfigurasiUnitPage() {
         </TabsContent>
       </Tabs>
       </div>
+
+      {/* Unit Dasar Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={unitDeleteDialog.open}
+        onOpenChange={(open) => setUnitDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Unit Dasar"
+        description={`Apakah Anda yakin ingin menghapus unit dasar "${unitDeleteDialog.unit?.nama_unit}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDeleteUnit}
+        loading={unitDeleteDialog.loading}
+      />
+
+      {/* Kemasan Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={kemasanDeleteDialog.open}
+        onOpenChange={(open) => setKemasanDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Kemasan"
+        description={`Apakah Anda yakin ingin menghapus kemasan "${kemasanDeleteDialog.kemasan?.nama_kemasan}"? Tindakan ini tidak dapat dibatalkan.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+        onConfirm={handleConfirmDeleteKemasan}
+        loading={kemasanDeleteDialog.loading}
+      />
     </div>
   );
 }

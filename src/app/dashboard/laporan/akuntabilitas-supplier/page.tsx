@@ -433,7 +433,6 @@ export default function LaporanAkuntabilitasSupplierPage() {
               <DataTable
                 columns={laporanColumns}
                 data={filteredData}
-                loading={loading}
                 searchKey="nama_bahan_baku"
                 searchPlaceholder="Cari bahan baku..."
               />
@@ -459,7 +458,6 @@ export default function LaporanAkuntabilitasSupplierPage() {
               <DataTable
                 columns={pelanggaranColumns}
                 data={pelanggaranData}
-                loading={loading}
                 searchKey="nama_bahan_baku"
                 searchPlaceholder="Cari bahan baku..."
               />

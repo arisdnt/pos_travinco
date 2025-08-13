@@ -150,7 +150,7 @@ export default function UnitDasarDetailPage() {
       <Navbar
         title="Detail Unit Dasar"
         showBackButton
-        backUrl="/dashboard/master-data/konfigurasi-unit"
+        backUrl="/dashboard/master-data/unit-dasar"
         actions={navbarActions}
       />
       

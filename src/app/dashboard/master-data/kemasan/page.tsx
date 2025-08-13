@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Navbar } from '@/components/layout/navbar';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Plus, Package, Eye, Edit, Trash2, BarChart3, TrendingUp, Ruler, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
@@ -31,6 +32,11 @@ export default function KemasanPage() {
   const [kemasanLoading, setKemasanLoading] = useState(true);
   const [kemasanSearchTerm, setKemasanSearchTerm] = useState('');
   const [kemasanDeleting, setKemasanDeleting] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    kemasan: Kemasan | null;
+    loading: boolean;
+  }>({ open: false, kemasan: null, loading: false });
   const [stats, setStats] = useState<KemasanStats>({
     totalKemasan: 0,
     uniqueUnits: 0,
@@ -130,19 +136,21 @@ export default function KemasanPage() {
     router.push(`/dashboard/master-data/konfigurasi-unit/kemasan/${id}/edit`);
   };
 
-  const handleDeleteKemasan = async (id: string, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus kemasan "${nama}"?`)) {
-      return;
-    }
+  const handleDeleteKemasan = useCallback((kemasan: Kemasan) => {
+    setDeleteDialog({ open: true, kemasan, loading: false });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.kemasan) return;
 
     try {
-      setKemasanDeleting(id);
+      setDeleteDialog(prev => ({ ...prev, loading: true }));
       const supabase = createClient();
       
       const { error } = await supabase
         .from('kemasan')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.kemasan.id);
 
       if (error) {
         console.error('Error deleting kemasan:', error);
@@ -151,14 +159,15 @@ export default function KemasanPage() {
       }
 
       toast.success('Kemasan berhasil dihapus');
+      setDeleteDialog({ open: false, kemasan: null, loading: false });
       fetchKemasanData();
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error in handleConfirmDelete:', error);
       toast.error('Terjadi kesalahan saat menghapus data');
     } finally {
-      setKemasanDeleting(null);
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [deleteDialog.kemasan, fetchKemasanData]);
 
   // Define navbar actions for Kemasan
   const kemasanNavbarActions = [
@@ -240,7 +249,7 @@ export default function KemasanPage() {
         return (
           <ActionDropdown>
             <DropdownMenuItem 
-              onClick={() => router.push(`/dashboard/master-data/kemasan/${item.id}`)}
+              onClick={() => router.push(`/dashboard/master-data/konfigurasi-unit/kemasan/${item.id}`)}
             >
               <Eye className="mr-2 h-4 w-4" />
               Lihat Detail
@@ -252,7 +261,7 @@ export default function KemasanPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDeleteKemasan(item.id, item.nama_kemasan)}
+              onClick={() => handleDeleteKemasan(item)}
               className="text-red-600"
               disabled={kemasanDeleting === item.id}
             >
@@ -316,6 +325,18 @@ export default function KemasanPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Kemasan"
+        description={`Apakah Anda yakin ingin menghapus kemasan "${deleteDialog.kemasan?.nama_kemasan || 'ini'}"? Tindakan ini tidak dapat dibatalkan.`}
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+      />
     </div>
   );
 }

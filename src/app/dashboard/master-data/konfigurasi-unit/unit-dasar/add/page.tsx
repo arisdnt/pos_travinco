@@ -108,7 +108,7 @@ export default function AddUnitDasarPage() {
       <Navbar 
         title="Tambah Unit Dasar" 
         showBackButton={true}
-        backUrl="/dashboard/master-data/konfigurasi-unit"
+        backUrl="/dashboard/master-data/unit-dasar"
         actions={navbarActions}
       />
 

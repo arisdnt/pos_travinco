@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { Navbar, createNavbarActions } from '@/components/layout/navbar';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 
 
 
@@ -23,6 +24,11 @@ export default function PembelianPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    pembelian: any | null;
+    loading: boolean;
+  }>({ open: false, pembelian: null, loading: false });
 
   useEffect(() => {
     console.log('🚀 Component mounted, memulai fetch data...');
@@ -136,18 +142,27 @@ export default function PembelianPage() {
     router.push(`/dashboard/pembelian/edit/${id}`);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus data pembelian ini?')) {
-      return;
-    }
+  const handleDelete = useCallback((pembelian: any) => {
+    setDeleteDialog({ open: true, pembelian, loading: false });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.pembelian) return;
 
     try {
-      console.log('🗑️ Menghapus pembelian dengan id:', id);
+      const user = await getCurrentUser();
+      if (!user) {
+        toast.error('Anda harus login terlebih dahulu');
+        return;
+      }
+
+      setDeleteDialog(prev => ({ ...prev, loading: true }));
+      console.log('🗑️ Menghapus pembelian dengan id:', deleteDialog.pembelian.id);
       
       const { error } = await supabase
         .from('pembelian')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.pembelian.id);
 
       if (error) {
         console.error('❌ Error deleting pembelian:', error);
@@ -156,12 +171,14 @@ export default function PembelianPage() {
 
       console.log('✅ Pembelian berhasil dihapus');
       toast.success('Data pembelian berhasil dihapus');
+      setDeleteDialog({ open: false, pembelian: null, loading: false });
       fetchPembelianData();
     } catch (error) {
       console.error('💥 Error deleting pembelian:', error);
       toast.error('Gagal menghapus data pembelian');
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [deleteDialog.pembelian, fetchPembelianData]);
 
   // DataTable handles filtering internally with searchKey
 
@@ -308,7 +325,7 @@ export default function PembelianPage() {
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDelete(row.original.id)}
+              onClick={() => handleDelete(row.original)}
               className="text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -385,18 +402,30 @@ export default function PembelianPage() {
           />
         </div>
 
-        <Card>
-          <CardContent>
+        {/* Main Content */}
+        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <CardContent className="p-6">
             <DataTable
               columns={columns}
               data={data}
-              searchKey="bahan_baku.nama_bahan_baku"
+              searchKey="bahan_baku"
               searchPlaceholder="Cari bahan baku..."
               hideColumnToggle={true}
             />
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Data Pembelian"
+        description={`Apakah Anda yakin ingin menghapus data pembelian ${deleteDialog.pembelian?.bahan_baku?.nama_bahan_baku || 'ini'}? Tindakan ini tidak dapat dibatalkan.`}
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+        confirmText="Hapus"
+        cancelText="Batal"
+      />
     </div>
   );
 }

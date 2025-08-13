@@ -153,7 +153,7 @@ export default function KemasanDetailPage() {
       <Navbar
         title="Detail Kemasan"
         showBackButton
-        backUrl="/dashboard/master-data/konfigurasi-unit"
+        backUrl="/dashboard/master-data/kemasan"
         actions={navbarActions}
       />
       

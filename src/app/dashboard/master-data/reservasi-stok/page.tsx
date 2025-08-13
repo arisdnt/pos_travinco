@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import {
 import { Navbar } from '@/components/layout/navbar';
 import { Badge } from '@/components/ui/badge';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Plus, Calendar, Package, AlertTriangle, Eye, Edit, Trash2, TrendingUp, Users, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -29,6 +30,11 @@ export default function ReservasiStokPage() {
   const [reservasiStoks, setReservasiStoks] = useState<ReservasiStokSupplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    reservasi: ReservasiStokSupplier | null;
+    loading: boolean;
+  }>({ open: false, reservasi: null, loading: false });
   const [stats, setStats] = useState<ReservasiStokStats>({
     totalReservasi: 0,
     totalSupplier: 0,
@@ -137,19 +143,21 @@ export default function ReservasiStokPage() {
     router.push(`/dashboard/master-data/reservasi-stok/${id}/edit`);
   };
 
-  const handleDelete = async (id: string, catatan: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus reservasi "${catatan || 'ini'}"?`)) {
-      return;
-    }
+  const handleDelete = useCallback((reservasi: ReservasiStokSupplier) => {
+    setDeleteDialog({ open: true, reservasi, loading: false });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteDialog.reservasi) return;
 
     try {
-      setDeleting(id);
+      setDeleteDialog(prev => ({ ...prev, loading: true }));
       const supabase = createClient();
       
       const { error } = await supabase
         .from('reservasi_stok_supplier')
         .delete()
-        .eq('id', id);
+        .eq('id', deleteDialog.reservasi.id);
 
       if (error) {
         console.error('Error deleting reservasi stok:', error);
@@ -158,14 +166,15 @@ export default function ReservasiStokPage() {
       }
 
       toast.success('Reservasi stok berhasil dihapus');
+      setDeleteDialog({ open: false, reservasi: null, loading: false });
       fetchReservasiStoks();
     } catch (error) {
-      console.error('Error in handleDelete:', error);
+      console.error('Error in handleConfirmDelete:', error);
       toast.error('Terjadi kesalahan saat menghapus data');
     } finally {
-      setDeleting(null);
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
-  };
+  }, [deleteDialog.reservasi, fetchReservasiStoks]);
 
 
 
@@ -309,7 +318,7 @@ export default function ReservasiStokPage() {
               Edit Reservasi
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleDelete(reservasi.id, reservasi.catatan || 'reservasi')}
+              onClick={() => handleDelete(reservasi)}
               className="text-red-600 focus:text-red-600"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -384,6 +393,18 @@ export default function ReservasiStokPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Hapus Reservasi Stok"
+        description={`Apakah Anda yakin ingin menghapus reservasi stok ${deleteDialog.reservasi?.catatan || 'ini'}? Tindakan ini tidak dapat dibatalkan.`}
+        onConfirm={handleConfirmDelete}
+        loading={deleteDialog.loading}
+        confirmText="Hapus"
+        cancelText="Batal"
+        variant="destructive"
+      />
     </div>
   );
 }
