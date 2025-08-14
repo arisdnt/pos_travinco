@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { Navbar } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { Badge } from '@/components/ui/badge';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
@@ -346,7 +347,9 @@ export default function ReservasiStokPage() {
             variant: 'default'
           }
         ]}
-      />
+      >
+        <DateTimeDisplay />
+      </Navbar>
       
       <div className="flex-1 space-y-6 p-4 md:p-6">
         {/* Stats Cards */}
@@ -381,8 +384,8 @@ export default function ReservasiStokPage() {
            />
          </div>
 
-        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardContent className="p-6">
+        <Card className="shadow-sm border bg-white dark:bg-gray-900">
+          <CardContent className="p-3">
             <DataTable
               columns={columns}
               data={reservasiStoks}

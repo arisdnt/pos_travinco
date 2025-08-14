@@ -9,6 +9,7 @@ import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 
 interface Penjualan {
   id: string;
@@ -181,7 +182,9 @@ export default function DetailPenjualanPage() {
         title="Detail Penjualan"
         showBackButton
         actions={navbarActions}
-      />
+      >
+        <DateTimeDisplay />
+      </Navbar>
       <div className="p-4 md:p-6">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
           {/* Informasi Produk */}

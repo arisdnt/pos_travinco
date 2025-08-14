@@ -13,7 +13,8 @@ import { DataTable, SortableHeader, ActionDropdown } from "@/components/ui/data-
 import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { Navbar } from "@/components/layout/navbar"
+import { Navbar } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { StatCard, StatCardVariants } from "@/components/ui/stat-card"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { createClient } from '@/lib/supabase/client'
@@ -212,7 +213,7 @@ export default function KategoriPage() {
       const rows = data.map((item) => ({
         'Nama Kategori': item.nama_kategori,
         Deskripsi: item.deskripsi || '-',
-        Ditambahkan: new Date(item.created_at).toLocaleString('id-ID')
+        Ditambahkan: item.created_at ? new Date(item.created_at).toLocaleString('id-ID') : '-'
       }));
       await exportToXlsx('kategori', {
         sheetName: 'Kategori',
@@ -255,7 +256,9 @@ export default function KategoriPage() {
       <Navbar 
         title="Kategori" 
         actions={navbarActions}
-      />
+      >
+        <DateTimeDisplay />
+      </Navbar>
       <div className="flex-1 p-4 md:p-6 space-y-6">
 
         {/* Stats Cards */}
@@ -291,8 +294,8 @@ export default function KategoriPage() {
         </div>
 
       {/* Main Content */}
-      <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-        <CardContent className="p-6">
+      <Card className="shadow-sm border bg-white dark:bg-gray-900">
+        <CardContent className="p-3">
           <DataTable 
             columns={columns} 
             data={data} 

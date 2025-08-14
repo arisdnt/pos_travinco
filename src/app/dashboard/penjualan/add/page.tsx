@@ -12,6 +12,7 @@ import { Save, ShoppingCart, Plus, Trash2 } from 'lucide-react';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Navbar } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { formatCurrency } from '@/lib/utils';
 
 interface ProdukJadi {
@@ -381,7 +382,9 @@ function AddPenjualanPage() {
         title="Tambah Penjualan" 
         showBackButton={true}
         actions={navbarActions}
-      />
+      >
+        <DateTimeDisplay />
+      </Navbar>
       
       <div className="p-4 md:p-6">
         <Card className="w-full shadow-lg">

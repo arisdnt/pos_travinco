@@ -5,17 +5,19 @@ import { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, TrendingUp, Calendar, Package, MoreHorizontal, DollarSign, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { ShoppingCart, TrendingUp, Package, MoreHorizontal, DollarSign, Plus, Edit, Trash2, Eye, Calendar } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { DataTable, SortableHeader, ActionDropdown } from '@/components/ui/data-table';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { exportToXlsx } from '@/lib/exporter';
+import SearchAndFilterForm from '@/components/SearchAndFilterForm';
 
 
 
@@ -25,9 +27,9 @@ export default function PembelianPage() {
   const router = useRouter();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState<'this_week' | 'last_2_weeks' | 'last_3_weeks' | 'this_month' | 'last_month' | 'custom'>('this_week');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [searchValue, setSearchValue] = useState<string>('');
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     pembelian: any | null;
@@ -35,18 +37,27 @@ export default function PembelianPage() {
   }>({ open: false, pembelian: null, loading: false });
 
   useEffect(() => {
-    console.log('🚀 Component mounted, memulai fetch data...');
-    // Initialize default range for this week (Mon -> today)
+    // Initialize default range to current month (1 -> last day)
     const now = new Date();
-    const day = now.getDay();
-    const diffToMonday = (day === 0 ? 6 : day - 1);
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diffToMonday);
-    monday.setHours(0, 0, 0, 0);
-    const startISO = monday.toISOString();
-    const endISO = new Date().toISOString();
-    setStartDate(monday.toISOString().split('T')[0]);
-    setEndDate(new Date().toISOString().split('T')[0]);
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    // Create dates in local timezone to avoid UTC conversion issues
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    
+    // Format dates as YYYY-MM-DD for input fields (local date)
+    const startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(monthEnd.getDate()).padStart(2, '0')}`;
+    
+    setStartDate(startDateStr);
+    setEndDate(endDateStr);
+    
+    // For API calls, use proper ISO strings with time
+    monthStart.setHours(0, 0, 0, 0);
+    monthEnd.setHours(23, 59, 59, 999);
+    const startISO = monthStart.toISOString();
+    const endISO = monthEnd.toISOString();
     fetchPembelianData(startISO, endISO);
   }, []);
 
@@ -200,7 +211,21 @@ export default function PembelianPage() {
     }
   }, [deleteDialog.pembelian, fetchPembelianData]);
 
-  // DataTable handles filtering internally with searchKey
+  // Filter data based on search value
+  const filteredData = useMemo(() => {
+    if (!searchValue.trim()) return data;
+    
+    return data.filter(item => {
+      const bahanBaku = item.bahan_baku?.nama_bahan_baku?.toLowerCase() || '';
+      const supplier = item.suppliers?.nama_supplier?.toLowerCase() || '';
+      const catatan = item.catatan?.toLowerCase() || '';
+      const searchTerm = searchValue.toLowerCase();
+      
+      return bahanBaku.includes(searchTerm) || 
+             supplier.includes(searchTerm) || 
+             catatan.includes(searchTerm);
+    });
+  }, [data, searchValue]);
 
   const totalPembelian = data.reduce((sum, item) => sum + (item.harga_beli || 0), 0);
   const totalTransaksi = data.length;
@@ -399,55 +424,16 @@ export default function PembelianPage() {
     }
   };
 
-  const applyPreset = () => {
-    let start: Date | null = null;
-    let end: Date | null = new Date();
-    const now = new Date();
-    switch (preset) {
-      case 'this_week': {
-        const day = now.getDay();
-        const diffToMonday = (day === 0 ? 6 : day - 1);
-        start = new Date(now);
-        start.setDate(now.getDate() - diffToMonday);
-        break;
-      }
-      case 'last_2_weeks': {
-        start = new Date(now);
-        start.setDate(now.getDate() - 14);
-        break;
-      }
-      case 'last_3_weeks': {
-        start = new Date(now);
-        start.setDate(now.getDate() - 21);
-        break;
-      }
-      case 'this_month': {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      }
-      case 'last_month': {
-        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        break;
-      }
-      case 'custom': {
-        // Use startDate and endDate from state
-        break;
-      }
+  const applyDateRange = () => {
+    if (!startDate || !endDate) {
+      toast.info('Pilih tanggal mulai dan akhir');
+      return;
     }
-    if (preset !== 'custom' && start) {
-      setStartDate(start.toISOString().split('T')[0]);
-      setEndDate(new Date().toISOString().split('T')[0]);
-      fetchPembelianData(start.toISOString(), end?.toISOString());
-    } else if (preset === 'custom' && startDate && endDate) {
-      const s = new Date(startDate);
-      s.setHours(0, 0, 0, 0);
-      const e = new Date(endDate);
-      e.setHours(23, 59, 59, 999);
-      fetchPembelianData(s.toISOString(), e.toISOString());
-    } else {
-      toast.info('Pilih tanggal mulai dan akhir untuk rentang kustom');
-    }
+    const s = new Date(startDate);
+    s.setHours(0, 0, 0, 0);
+    const e = new Date(endDate);
+    e.setHours(23, 59, 59, 999);
+    fetchPembelianData(s.toISOString(), e.toISOString());
   };
 
   const navbarActions = useMemo(() => [
@@ -475,9 +461,11 @@ export default function PembelianPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Navbar title="Pembelian" actions={navbarActions} />
+      <Navbar title="Pembelian" actions={navbarActions}>
+        <DateTimeDisplay />
+      </Navbar>
       
-      <div className="flex-1 p-4 md:p-6 space-y-6">
+      <div className="flex-1 p-4 md:p-6 space-y-4">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <StatCard
@@ -510,47 +498,25 @@ export default function PembelianPage() {
           />
         </div>
 
+        {/* Search and Filter Form */}
+        <SearchAndFilterForm
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          searchPlaceholder="Cari bahan baku, supplier, atau catatan..."
+          startDate={startDate}
+          endDate={endDate}
+          onChangeStart={setStartDate}
+          onChangeEnd={setEndDate}
+          onApply={applyDateRange}
+        />
+
         {/* Main Content */}
-        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardContent className="p-6">
+        <Card className="shadow-sm border bg-white dark:bg-gray-900">
+          <CardContent className="p-3">
             <DataTable
               columns={columns}
-              data={data}
-              searchKey="bahan_baku"
-              searchPlaceholder="Cari bahan baku..."
+              data={filteredData}
               hideColumnToggle={true}
-              extraControls={(
-                <div className="flex items-center gap-2 flex-wrap">
-                  <select
-                    value={preset}
-                    onChange={(e) => setPreset(e.target.value as any)}
-                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                    title="Preset waktu"
-                  >
-                    <option value="this_week">Minggu ini</option>
-                    <option value="last_2_weeks">2 minggu terakhir</option>
-                    <option value="last_3_weeks">3 minggu terakhir</option>
-                    <option value="this_month">Bulan ini</option>
-                    <option value="last_month">Bulan lalu</option>
-                    <option value="custom">Rentang tanggal</option>
-                  </select>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                    title="Tanggal mulai"
-                  />
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                    title="Tanggal selesai"
-                  />
-                  <Button variant="outline" size="sm" onClick={applyPreset}>Terapkan</Button>
-                </div>
-              )}
             />
           </CardContent>
         </Card>

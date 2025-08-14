@@ -271,8 +271,8 @@ export default function AddReservasiStokPage() {
       <div className="flex-1 p-4 md:p-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form Section */}
-          <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-            <CardContent className="p-6">
+          <Card className="shadow-sm border bg-white dark:bg-gray-900">
+            <CardContent className="p-3">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                   <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -486,8 +486,8 @@ export default function AddReservasiStokPage() {
 
           {/* Information Section */}
           <div className="space-y-6">
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-              <CardContent className="p-6">
+            <Card className="shadow-sm border bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -505,8 +505,8 @@ export default function AddReservasiStokPage() {
             </Card>
 
             {(selectedBahanBaku || selectedSupplier) && (
-              <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-                <CardContent className="p-6">
+              <Card className="shadow-sm border bg-white dark:bg-gray-900">
+                <CardContent className="p-3">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                       <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />

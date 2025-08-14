@@ -148,8 +148,8 @@ export default function DetailReservasiStokPage() {
         
         <div className="flex-1 p-4 md:p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-              <CardContent className="p-6">
+            <Card className="shadow-sm border bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
                 <div className="flex items-center justify-center h-64">
                   <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
@@ -180,8 +180,8 @@ export default function DetailReservasiStokPage() {
         />
         
         <div className="flex-1 p-4 md:p-6">
-          <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-            <CardContent className="p-6">
+          <Card className="shadow-sm border bg-white dark:bg-gray-900">
+            <CardContent className="p-3">
               <div className="text-center py-12">
                 <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -230,8 +230,8 @@ export default function DetailReservasiStokPage() {
       <div className="flex-1 p-4 md:p-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Main Information */}
-          <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-            <CardContent className="p-6">
+          <Card className="shadow-sm border bg-white dark:bg-gray-900">
+            <CardContent className="p-3">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                   <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -374,8 +374,8 @@ export default function DetailReservasiStokPage() {
 
           {/* Additional Information */}
           <div className="space-y-6">
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-              <CardContent className="p-6">
+            <Card className="shadow-sm border bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                     <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -401,8 +401,8 @@ export default function DetailReservasiStokPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-              <CardContent className="p-6">
+            <Card className="shadow-sm border bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-purple-600 dark:text-purple-400" />

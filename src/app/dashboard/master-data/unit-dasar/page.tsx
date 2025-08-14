@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Navbar } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { StatCard, StatCardVariants } from '@/components/ui/stat-card';
 import { Plus, Ruler, Eye, Edit, Trash2, Package, BarChart3, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
@@ -257,7 +258,9 @@ export default function UnitDasarPage() {
       <Navbar 
         title="Unit Dasar" 
         actions={unitNavbarActions}
-      />
+      >
+        <DateTimeDisplay />
+      </Navbar>
       <div className="flex-1 p-4 md:p-6 space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -291,8 +294,8 @@ export default function UnitDasarPage() {
           />
         </div>
 
-        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardContent className="p-6">
+        <Card className="shadow-sm border bg-white dark:bg-gray-900">
+          <CardContent className="p-3">
             <DataTable
               columns={unitColumns}
               data={unitData}

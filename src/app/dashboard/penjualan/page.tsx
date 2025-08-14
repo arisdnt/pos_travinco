@@ -10,11 +10,13 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { TrendingUp, DollarSign, ShoppingCart, Users, Package, Plus, Upload, Eye, Edit, Trash2, MoreHorizontal } from 'lucide-react';
 import { Navbar, createNavbarActions } from '@/components/layout/navbar';
+import { DateTimeDisplay } from '@/components/ui/date-time-display';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { supabase, getCurrentUser } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { exportToXlsx } from '@/lib/exporter';
+import SearchAndFilterForm from '@/components/SearchAndFilterForm';
 
 // Types
 interface Penjualan {
@@ -33,10 +35,9 @@ interface Penjualan {
 
 export default function PenjualanPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchValue, setSearchValue] = useState('');
   const [penjualanData, setPenjualanData] = useState<Penjualan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [preset, setPreset] = useState<'this_week' | 'last_2_weeks' | 'last_3_weeks' | 'this_month' | 'last_month' | 'custom'>('this_week');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -46,16 +47,26 @@ export default function PenjualanPage() {
   }>({ open: false, penjualan: null, loading: false });
 
   useEffect(() => {
-    // initialize to this week
+    // Initialize default range to current month (1 -> last day)
     const now = new Date();
-    const day = now.getDay();
-    const diffToMonday = (day === 0 ? 6 : day - 1);
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diffToMonday);
-    monday.setHours(0, 0, 0, 0);
-    setStartDate(monday.toISOString().split('T')[0]);
-    setEndDate(new Date().toISOString().split('T')[0]);
-    fetchPenjualan(monday.toISOString(), new Date().toISOString());
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    // Create dates in local timezone to avoid UTC conversion issues
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    
+    // Format dates as YYYY-MM-DD for input fields (local date)
+    const startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(monthEnd.getDate()).padStart(2, '0')}`;
+    
+    setStartDate(startDateStr);
+    setEndDate(endDateStr);
+    
+    // For API calls, use proper ISO strings with time
+    monthStart.setHours(0, 0, 0, 0);
+    monthEnd.setHours(23, 59, 59, 999);
+    fetchPenjualan(monthStart.toISOString(), monthEnd.toISOString());
   }, []);
 
   const fetchPenjualan = async (startISO?: string, endISO?: string) => {
@@ -89,52 +100,14 @@ export default function PenjualanPage() {
     }
   };
 
-  const applyPreset = () => {
-    let start: Date | null = null;
-    let end: Date | null = new Date();
-    const now = new Date();
-    switch (preset) {
-      case 'this_week': {
-        const day = now.getDay();
-        const diffToMonday = (day === 0 ? 6 : day - 1);
-        start = new Date(now);
-        start.setDate(now.getDate() - diffToMonday);
-        break;
-      }
-      case 'last_2_weeks': {
-        start = new Date(now);
-        start.setDate(now.getDate() - 14);
-        break;
-      }
-      case 'last_3_weeks': {
-        start = new Date(now);
-        start.setDate(now.getDate() - 21);
-        break;
-      }
-      case 'this_month': {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      }
-      case 'last_month': {
-        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        break;
-      }
-      case 'custom': {
-        break;
-      }
+  const applyDateRange = () => {
+    if (!startDate || !endDate) {
+      toast.info('Pilih tanggal mulai dan akhir');
+      return;
     }
-    if (preset !== 'custom' && start) {
-      setStartDate(start.toISOString().split('T')[0]);
-      setEndDate(new Date().toISOString().split('T')[0]);
-      fetchPenjualan(start.toISOString(), end?.toISOString());
-    } else if (preset === 'custom' && startDate && endDate) {
-      const s = new Date(startDate); s.setHours(0,0,0,0);
-      const e = new Date(endDate); e.setHours(23,59,59,999);
-      fetchPenjualan(s.toISOString(), e.toISOString());
-    } else {
-      toast.info('Pilih tanggal mulai dan akhir untuk rentang kustom');
-    }
+    const s = new Date(startDate); s.setHours(0,0,0,0);
+    const e = new Date(endDate); e.setHours(23,59,59,999);
+    fetchPenjualan(s.toISOString(), e.toISOString());
   };
 
   const handleDelete = useCallback((penjualan: Penjualan) => {
@@ -293,6 +266,20 @@ export default function PenjualanPage() {
     { label: "Filter", onClick: () => console.log('Filter'), variant: "outline" as const }
   ], [router, handleExport]);
 
+  // Filter data based on search value
+  const filteredData = useMemo(() => {
+    if (!searchValue.trim()) return penjualanData;
+    
+    return penjualanData.filter(item => {
+      const produkJadi = item.produk_jadi?.nama_produk_jadi?.toLowerCase() || '';
+      const catatan = item.catatan?.toLowerCase() || '';
+      const searchTerm = searchValue.toLowerCase();
+      
+      return produkJadi.includes(searchTerm) || 
+             catatan.includes(searchTerm);
+    });
+  }, [penjualanData, searchValue]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -312,9 +299,11 @@ export default function PenjualanPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Navbar title="Penjualan" actions={navbarActions} />
+      <Navbar title="Penjualan" actions={navbarActions}>
+        <DateTimeDisplay />
+      </Navbar>
       
-      <div className="flex-1 p-4 md:p-6 space-y-6">
+      <div className="flex-1 p-4 md:p-6 space-y-4">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <StatCard
@@ -347,45 +336,24 @@ export default function PenjualanPage() {
           />
         </div>
 
+        {/* Search and Filter Form */}
+        <SearchAndFilterForm
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          searchPlaceholder="Cari produk atau catatan..."
+          startDate={startDate}
+          endDate={endDate}
+          onChangeStart={setStartDate}
+          onChangeEnd={setEndDate}
+          onApply={applyDateRange}
+        />
+
         {/* Main Content */}
-        <Card className="shadow-lg border-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
-          <CardContent className="p-6 space-y-4">
-            {/* Filter Waktu (di dalam tabel) */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={preset}
-                onChange={(e) => setPreset(e.target.value as any)}
-                className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                title="Preset waktu"
-              >
-                <option value="this_week">Minggu ini</option>
-                <option value="last_2_weeks">2 minggu terakhir</option>
-                <option value="last_3_weeks">3 minggu terakhir</option>
-                <option value="this_month">Bulan ini</option>
-                <option value="last_month">Bulan lalu</option>
-                <option value="custom">Rentang tanggal</option>
-              </select>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                title="Tanggal mulai"
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-9 text-sm rounded-lg border border-gray-300 px-2 dark:bg-gray-900 dark:border-gray-700"
-                title="Tanggal selesai"
-              />
-              <Button variant="outline" size="sm" onClick={applyPreset}>Terapkan</Button>
-            </div>
+        <Card className="shadow-sm border bg-white dark:bg-gray-900">
+          <CardContent className="p-3">
             <DataTable
               columns={columns}
-              data={penjualanData}
-              searchKey="produk_jadi.nama_produk_jadi"
-              searchPlaceholder="Cari produk..."
+              data={filteredData}
               hideColumnToggle={true}
             />
           </CardContent>
